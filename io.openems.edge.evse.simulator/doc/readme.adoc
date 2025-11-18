@@ -1,0 +1,353 @@
+= EVSE Chargepoint Simulator
+
+This bundle provides simulation tools for EVSE (Electric Vehicle Supply Equipment) chargepoints. It supports both unit testing and runtime simulation scenarios.
+
+== Overview
+
+The simulator bundle contains:
+
+* *ChargePointSimulatorCore* - IEC 61851-1 state machine and physics simulation
+* *EvseSimulatorModbusBridge* - Runtime OSGi component that replaces `Bridge.Modbus.Tcp`
+* *Device-specific register mappers* - Alfen, Heidelberg, ABL, and Keba
+
+== EvseSimulatorModbusBridge Component
+
+The `Simulator.Evse.ModbusBridge` component simulates an EVSE chargepoint over Modbus for testing and demonstration purposes. It implements the `BridgeModbus` interface and can be used as a drop-in replacement for `Bridge.Modbus.Tcp`.
+
+=== Configuration
+
+[cols="1,1,2"]
+|===
+| Property | Default | Description
+
+| `id`
+| `modbus0`
+| Unique component ID
+
+| `alias`
+| (empty)
+| Human-readable name
+
+| `enabled`
+| `true`
+| Enable/disable component
+
+| `deviceType`
+| `ALFEN`
+| Device type to simulate: `ALFEN`, `HEIDELBERG`, `ABL`, `KEBA`
+
+| `modbusUnitId`
+| `1`
+| Modbus unit ID of simulated device
+
+| `logVerbosity`
+| `NONE`
+| Modbus communication logging level
+
+| `initialVoltageL1`
+| `230.0`
+| Initial voltage on phase L1 (V)
+
+| `initialVoltageL2`
+| `230.0`
+| Initial voltage on phase L2 (V)
+
+| `initialVoltageL3`
+| `230.0`
+| Initial voltage on phase L3 (V)
+
+| `phases`
+| `3`
+| Number of active phases (1 or 3)
+|===
+
+=== Control Channels
+
+These channels allow controlling the simulator behavior:
+
+[cols="1,1,2"]
+|===
+| Channel | Type | Description
+
+| `SimulatePlugIn`
+| Boolean (R/W)
+| Set to `true` to simulate plugging in a vehicle
+
+| `SimulateUnplug`
+| Boolean (R/W)
+| Set to `true` to simulate unplugging a vehicle
+
+| `SetCurrentLimit`
+| Integer (R/W)
+| Set the charging current limit in milliamps (mA)
+
+| `SimulateError`
+| Boolean (R/W)
+| Set to `true` to trigger an error state
+
+| `ClearError`
+| Boolean (R/W)
+| Set to `true` to clear the error state
+|===
+
+=== Monitoring Channels
+
+These channels expose the current simulator state:
+
+[cols="1,1,2"]
+|===
+| Channel | Unit | Description
+
+| `SimulatedState`
+| -
+| IEC 61851-1 state: `A` (unplugged), `B` (connected), `C` (charging), `D` (charging w/ ventilation), `E` (error), `F` (not available)
+
+| `SimulatedPower`
+| W
+| Current charging power
+
+| `SimulatedEnergySession`
+| Wh
+| Energy charged in current session
+
+| `SimulatedEnergyTotal`
+| Wh
+| Total lifetime energy
+
+| `SimulatedCurrentL1`
+| mA
+| Current on phase L1
+
+| `SimulatedCurrentL2`
+| mA
+| Current on phase L2
+
+| `SimulatedCurrentL3`
+| mA
+| Current on phase L3
+
+| `SimulatedVoltageL1`
+| mV
+| Voltage on phase L1
+
+| `SimulatedVoltageL2`
+| mV
+| Voltage on phase L2
+
+| `SimulatedVoltageL3`
+| mV
+| Voltage on phase L3
+
+| `SimulatedPhases`
+| -
+| Number of active phases
+
+| `SimulatedCurrentLimit`
+| mA
+| Current charging limit
+
+| `DeviceType`
+| -
+| Device type being simulated
+
+| `SimulatorRunning`
+| -
+| Indicates simulator is active
+|===
+
+== Usage
+
+=== Runtime Simulation (OpenEMS UI)
+
+. Add the simulator bridge component:
++
+[source]
+----
+Component: Simulator.Evse.ModbusBridge
+ID: modbus0
+Device Type: ALFEN
+----
+
+. Add the chargepoint component pointing to the simulator:
++
+[source]
+----
+Component: Evse.Chargepoint.Alfen
+ID: evse0
+Modbus-ID: modbus0
+Modbus Unit-ID: 1
+----
+
+. Control the simulation via channels:
++
+* Write `true` to `SimulatePlugIn` to connect a vehicle
+* Write current limit (e.g., `16000` for 16A) to `SetCurrentLimit`
+* The simulator will transition through states automatically:
+** `A` → `B` (on plug-in)
+** `B` → `C` (when current > 6A minimum)
+* Write `true` to `SimulateUnplug` to disconnect
+
+=== Unit Testing
+
+For unit tests, use the `ChargePointSimulator` wrapper:
+
+[source,java]
+----
+import io.openems.edge.evse.simulator.core.ChargePointSimulator;
+
+@Test
+public void testChargingSession() throws Exception {
+    // Create simulator
+    var simulator = ChargePointSimulator.alfen("modbus0");
+
+    // Use the modbus bridge in your test
+    new ComponentTest(new EvseChargePointAlfenImpl())
+        .addReference("cm", new DummyConfigurationAdmin())
+        .addReference("setModbus", simulator.getModbus())
+        .activate(MyConfig.create()
+            .setId("evse0")
+            .setModbusId("modbus0")
+            .setModbusUnitId(1)
+            .build());
+
+    // Simulate charging session
+    simulator.plugIn();
+    // State is now B (connected)
+
+    simulator.setCurrentLimit(16000); // 16A
+    // State transitions to C (charging)
+
+    simulator.tick(10 * 60 * 1000); // 10 minutes
+    // Energy accumulates based on power
+
+    simulator.unplug();
+    // State returns to A
+}
+----
+
+Available factory methods:
+
+* `ChargePointSimulator.alfen(modbusId)`
+* `ChargePointSimulator.heidelberg(modbusId)`
+* `ChargePointSimulator.abl(modbusId)`
+* `ChargePointSimulator.keba(modbusId)`
+
+== State Machine
+
+The simulator implements the IEC 61851-1 state machine:
+
+[source]
+----
+    ┌───────────────────────────────────────┐
+    │                                       │
+    ▼                                       │
+┌───────┐  plugIn()   ┌───────┐  current>6A ┌───────┐
+│   A   │ ─────────▶  │   B   │ ─────────▶  │   C   │
+│Unplugged│           │Connected│           │Charging│
+└───────┘  ◀───────── └───────┘  ◀───────── └───────┘
+           unplug()              current=0
+    │                      │
+    │ setError()           │ setError()
+    ▼                      ▼
+┌───────┐              ┌───────┐
+│   E   │              │   E   │
+│ Error │              │ Error │
+└───────┘              └───────┘
+----
+
+=== State Transitions
+
+* *A → B*: `plugIn()` - Vehicle connects
+* *B → C*: Automatic when `setCurrentLimit()` > 6000 mA
+* *C → B*: `setCurrentLimit(0)` - Stop charging
+* *B → A*: `unplug()` - Vehicle disconnects
+* *Any → E*: `setError()` - Error condition
+* *E → previous*: `clearError()` - Resume from error
+
+== Physics Simulation
+
+When in state C (charging), the simulator calculates:
+
+* *Power* = Voltage × Current × Phases
+* *Energy* accumulates over time via `tick(milliseconds)`
+
+Example:
+[source,java]
+----
+simulator.setVoltages(230, 230, 230);
+simulator.setPhases(3);
+simulator.setCurrentLimit(16000); // 16A
+simulator.plugIn();
+
+// Power = 230V × 16A × 3 = 11,040W
+
+simulator.tick(3600000); // 1 hour
+// Energy = 11,040 Wh
+----
+
+== Supported Device Types
+
+=== Alfen Eve
+
+* Voltages: Float32 at registers 306-311
+* Currents: Float32 at registers 320-325
+* Power: Float64 at registers 344-347
+* Energy: Float64 at registers 374-377
+* State: String at registers 1201-1205
+* Max current: Float32 at registers 1210-1211 (mA)
+* Phase config: Uint16 at register 1215
+
+=== Heidelberg Energy Control
+
+* Uses FC4 Input Registers for readings
+* Currents in 10mA units (registers 6-8)
+* Voltages in V (registers 10-12)
+* Power in W (register 14)
+* State codes: A1=2, B2=4, C2=6, E=9
+
+=== ABL eMH1
+
+* Holding registers with plug offset (0x100 per plug)
+* Currents in 10mA units as doubleword
+* State codes: A1=0xA1, B1=0xB1, C2=0xC2
+
+=== Keba P30
+
+* All values as doubleword registers
+* Currents in mA (registers 1008-1012)
+* Power in mW (register 1020)
+* Energy in 0.1 Wh (register 1036)
+
+== Architecture
+
+[source]
+----
+┌─────────────────────────────────────────────────┐
+│           OpenEMS Edge Configuration            │
+├─────────────────────────────────────────────────┤
+│                                                 │
+│  ┌─────────────────┐    ┌───────────────────┐   │
+│  │ Evse.Chargepoint│    │   Simulator.Evse  │   │
+│  │     .Alfen      │───▶│   .ModbusBridge   │   │
+│  │    (evse0)      │    │     (modbus0)     │   │
+│  └─────────────────┘    └─────────┬─────────┘   │
+│                                   │             │
+│                         ┌─────────▼─────────┐   │
+│                         │ ChargePointSimu-  │   │
+│                         │    latorCore      │   │
+│                         └─────────┬─────────┘   │
+│                                   │             │
+│                         ┌─────────▼─────────┐   │
+│                         │ AlfenRegister-    │   │
+│                         │     Mapper        │   │
+│                         └───────────────────┘   │
+│                                                 │
+└─────────────────────────────────────────────────┘
+----
+
+The chargepoint component communicates with the simulator bridge via Modbus protocol. The bridge uses the `ChargePointSimulatorCore` for state management and physics, and the device-specific `ModbusRegisterMapper` to translate state to register values.
+
+== See Also
+
+* link:../io.openems.edge.evse.chargepoint.alfen/doc/readme.adoc[Alfen Chargepoint Component]
+* link:../io.openems.edge.bridge.modbus/readme.adoc[Modbus Bridge]
