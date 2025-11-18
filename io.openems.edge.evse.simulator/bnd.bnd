@@ -1,21 +1,13 @@
-Bundle-Name: OpenEMS Edge EVSE Simulator
+Bundle-Name: OpenEMS Edge EVSE Simulator Core
 Bundle-Vendor: OpenEMS Association e.V.
 Bundle-License: https://opensource.org/licenses/EPL-2.0
 Bundle-Version: 1.0.0.${tstamp}
 
 Export-Package: \
-	io.openems.edge.evse.simulator.core,\
-	io.openems.edge.evse.simulator.bridge,\
-	io.openems.edge.evse.simulator.alfen,\
-	io.openems.edge.evse.simulator.abl,\
-	io.openems.edge.evse.simulator.heidelberg,\
-	io.openems.edge.evse.simulator.keba
+	io.openems.edge.evse.simulator.core
 
 -buildpath: \
-	${buildpath},\
-	io.openems.common,\
-	io.openems.edge.common,\
-	io.openems.edge.bridge.modbus,\
+	${buildpath}
 
 -testpath: \
 	${testpath}
