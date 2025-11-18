@@ -8,7 +8,9 @@ import io.openems.common.test.DummyConfigurationAdmin;
 import io.openems.edge.bridge.modbus.test.DummyModbusBridge;
 import io.openems.edge.common.test.AbstractComponentTest.TestCase;
 import io.openems.edge.common.test.ComponentTest;
+import io.openems.edge.evse.api.chargepoint.EvseChargePoint;
 import io.openems.edge.evse.chargepoint.alfen.enums.ChargingState;
+import io.openems.edge.evse.simulator.core.ChargePointSimulator;
 
 public class EvseChargePointAlfenImplTest {
 
@@ -117,6 +119,100 @@ public class EvseChargePointAlfenImplTest {
 						.build()) //
 				.next(new TestCase()) //
 				.deactivate();
+	}
+
+	/**
+	 * Test using ChargePointSimulator for a complete charging cycle.
+	 *
+	 * <p>
+	 * This demonstrates the advantage of using the simulator over manual hex
+	 * values: readable code, automatic value calculation, and realistic behavior.
+	 */
+	@Test
+	public void testWithChargePointSimulator() throws Exception {
+		// Create simulator - much cleaner than manual hex values!
+		var simulator = ChargePointSimulator.alfen("modbus0");
+
+		var test = new ComponentTest(new EvseChargePointAlfenImpl()) //
+				.addReference("cm", new DummyConfigurationAdmin()) //
+				.addReference("setModbus", simulator.getModbus()) //
+				.activate(MyConfig.create() //
+						.setId("evseChargePoint0") //
+						.setModbusId("modbus0") //
+						.setModbusUnitId(1) //
+						.setDebugMode(false) //
+						.setReadOnly(false) //
+						.setPhaseRotation(L1_L2_L3) //
+						.build());
+
+		// Initial state: no car connected
+		test.next(new TestCase("Initial - no car") //
+				.output(EvseChargePoint.ChannelId.IS_READY_FOR_CHARGING, false));
+
+		// Car plugs in
+		simulator.plugIn();
+		test.next(new TestCase("Car plugged in") //
+				.output(EvseChargePoint.ChannelId.IS_READY_FOR_CHARGING, true) //
+				.output(EvseChargePointAlfen.ChannelId.PHASE_CONFIGURATION, 3));
+
+		// Set current limit - charging starts automatically
+		simulator.setCurrentLimit(16000); // 16A
+		test.next(new TestCase("Charging at 16A") //
+				.output(EvseChargePointAlfen.ChannelId.PHASE_CONFIGURATION, 3));
+
+		// Simulate 10 minutes of charging
+		simulator.tick(10 * 60 * 1000); // 10 minutes in ms
+		test.next(new TestCase("After 10 minutes"));
+
+		// Reduce current
+		simulator.setCurrentLimit(8000); // 8A
+		test.next(new TestCase("Reduced to 8A"));
+
+		// Stop charging (set current to 0)
+		simulator.setCurrentLimit(0);
+		test.next(new TestCase("Charging paused"));
+
+		// Car unplugs
+		simulator.unplug();
+		test.next(new TestCase("Car unplugged") //
+				.output(EvseChargePoint.ChannelId.IS_READY_FOR_CHARGING, false));
+
+		test.deactivate();
+	}
+
+	/**
+	 * Test error handling with simulator.
+	 */
+	@Test
+	public void testSimulatorErrorState() throws Exception {
+		var simulator = ChargePointSimulator.alfen("modbus0");
+
+		var test = new ComponentTest(new EvseChargePointAlfenImpl()) //
+				.addReference("cm", new DummyConfigurationAdmin()) //
+				.addReference("setModbus", simulator.getModbus()) //
+				.activate(MyConfig.create() //
+						.setId("evseChargePoint0") //
+						.setModbusId("modbus0") //
+						.setModbusUnitId(1) //
+						.setDebugMode(false) //
+						.setReadOnly(false) //
+						.setPhaseRotation(L1_L2_L3) //
+						.build());
+
+		// Normal operation
+		simulator.plugIn();
+		test.next(new TestCase("Normal operation"));
+
+		// Error occurs
+		simulator.setError();
+		test.next(new TestCase("Error state") //
+				.output(EvseChargePoint.ChannelId.IS_READY_FOR_CHARGING, false));
+
+		// Error cleared
+		simulator.clearError();
+		test.next(new TestCase("Error cleared"));
+
+		test.deactivate();
 	}
 
 	/**
