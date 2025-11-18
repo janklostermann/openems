@@ -21,8 +21,11 @@ import io.openems.edge.meter.api.PhaseRotation;
 	@AttributeDefinition(name = "Read only", description = "Defines that this EVSE is read only.", required = true)
 	boolean readOnly() default false;
 
-	@AttributeDefinition(name = "Debug Mode", description = "Activates the debug mode")
+	@AttributeDefinition(name = "Debug Mode", description = "Activates the debug mode with raw register visualization")
 	boolean debugMode() default false;
+
+	@AttributeDefinition(name = "Simulation Mode", description = "Use internal simulator instead of real hardware (no Modbus connection required)")
+	boolean simulationMode() default false;
 
 	@AttributeDefinition(name = "Phase Rotation", description = "Apply standard or rotated wiring")
 	PhaseRotation phaseRotation() default PhaseRotation.L1_L2_L3;

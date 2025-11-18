@@ -4,6 +4,7 @@ import static io.openems.common.channel.AccessMode.READ_WRITE;
 import static io.openems.common.channel.AccessMode.WRITE_ONLY;
 import static io.openems.common.channel.Unit.MILLIAMPERE;
 import static io.openems.common.channel.Unit.WATT_HOURS;
+import static io.openems.common.types.OpenemsType.BOOLEAN;
 import static io.openems.common.types.OpenemsType.INTEGER;
 import static io.openems.common.types.OpenemsType.LONG;
 import static io.openems.common.types.OpenemsType.STRING;
@@ -11,6 +12,7 @@ import static io.openems.common.types.OpenemsType.STRING;
 import io.openems.common.channel.Unit;
 import io.openems.common.exceptions.OpenemsError.OpenemsNamedException;
 import io.openems.common.types.OpenemsType;
+import io.openems.edge.common.channel.BooleanWriteChannel;
 import io.openems.edge.common.channel.Doc;
 import io.openems.edge.common.channel.EnumReadChannel;
 import io.openems.edge.common.channel.IntegerWriteChannel;
@@ -70,6 +72,185 @@ public interface EvseChargePointAlfen extends OpenemsComponent {
 		 */
 		TEMPERATURE(Doc.of(OpenemsType.INTEGER) //
 				.unit(Unit.DEZIDEGREE_CELSIUS)),
+
+		// Simulation mode channels
+		/**
+		 * Simulation mode active.
+		 */
+		SIMULATION_MODE(Doc.of(BOOLEAN) //
+				.text("Simulation mode is active")),
+
+		/**
+		 * Simulate plugging in a vehicle.
+		 */
+		SIMULATE_PLUG_IN(Doc.of(BOOLEAN) //
+				.accessMode(READ_WRITE) //
+				.text("Simulate plugging in a vehicle")),
+
+		/**
+		 * Simulate unplugging a vehicle.
+		 */
+		SIMULATE_UNPLUG(Doc.of(BOOLEAN) //
+				.accessMode(READ_WRITE) //
+				.text("Simulate unplugging a vehicle")),
+
+		/**
+		 * Simulate an error condition.
+		 */
+		SIMULATE_ERROR(Doc.of(BOOLEAN) //
+				.accessMode(READ_WRITE) //
+				.text("Simulate an error condition")),
+
+		/**
+		 * Clear simulated error.
+		 */
+		SIMULATE_CLEAR_ERROR(Doc.of(BOOLEAN) //
+				.accessMode(READ_WRITE) //
+				.text("Clear simulated error")),
+
+		// Debug mode channels - raw register values
+		/**
+		 * Debug mode active.
+		 */
+		DEBUG_MODE(Doc.of(BOOLEAN) //
+				.text("Debug mode is active")),
+
+		/**
+		 * Raw voltage L1 register value.
+		 */
+		RAW_VOLTAGE_L1(Doc.of(STRING) //
+				.text("Raw voltage L1 registers (hex)")),
+
+		/**
+		 * Raw voltage L2 register value.
+		 */
+		RAW_VOLTAGE_L2(Doc.of(STRING) //
+				.text("Raw voltage L2 registers (hex)")),
+
+		/**
+		 * Raw voltage L3 register value.
+		 */
+		RAW_VOLTAGE_L3(Doc.of(STRING) //
+				.text("Raw voltage L3 registers (hex)")),
+
+		/**
+		 * Raw current L1 register value.
+		 */
+		RAW_CURRENT_L1(Doc.of(STRING) //
+				.text("Raw current L1 registers (hex)")),
+
+		/**
+		 * Raw current L2 register value.
+		 */
+		RAW_CURRENT_L2(Doc.of(STRING) //
+				.text("Raw current L2 registers (hex)")),
+
+		/**
+		 * Raw current L3 register value.
+		 */
+		RAW_CURRENT_L3(Doc.of(STRING) //
+				.text("Raw current L3 registers (hex)")),
+
+		/**
+		 * Raw power register value.
+		 */
+		RAW_POWER(Doc.of(STRING) //
+				.text("Raw power registers (hex)")),
+
+		/**
+		 * Raw energy register value.
+		 */
+		RAW_ENERGY(Doc.of(STRING) //
+				.text("Raw energy registers (hex)")),
+
+		/**
+		 * Raw state register value.
+		 */
+		RAW_STATE(Doc.of(STRING) //
+				.text("Raw state registers (hex)")),
+
+		/**
+		 * Raw max current register value.
+		 */
+		RAW_MAX_CURRENT(Doc.of(STRING) //
+				.text("Raw max current registers (hex)")),
+
+		// Override controls for debug mode
+		/**
+		 * Override voltage with manual value.
+		 */
+		OVERRIDE_VOLTAGE(Doc.of(BOOLEAN) //
+				.accessMode(READ_WRITE) //
+				.text("Override voltage with manual value")),
+
+		/**
+		 * Override current with manual value.
+		 */
+		OVERRIDE_CURRENT(Doc.of(BOOLEAN) //
+				.accessMode(READ_WRITE) //
+				.text("Override current with manual value")),
+
+		/**
+		 * Override power with manual value.
+		 */
+		OVERRIDE_POWER(Doc.of(BOOLEAN) //
+				.accessMode(READ_WRITE) //
+				.text("Override power with manual value")),
+
+		/**
+		 * Override state with manual value.
+		 */
+		OVERRIDE_STATE(Doc.of(BOOLEAN) //
+				.accessMode(READ_WRITE) //
+				.text("Override state with manual value")),
+
+		/**
+		 * Manual voltage L1 value in V.
+		 */
+		MANUAL_VOLTAGE_L1(Doc.of(INTEGER) //
+				.unit(Unit.VOLT) //
+				.accessMode(READ_WRITE) //
+				.text("Manual voltage L1")),
+
+		/**
+		 * Manual voltage L2 value in V.
+		 */
+		MANUAL_VOLTAGE_L2(Doc.of(INTEGER) //
+				.unit(Unit.VOLT) //
+				.accessMode(READ_WRITE) //
+				.text("Manual voltage L2")),
+
+		/**
+		 * Manual voltage L3 value in V.
+		 */
+		MANUAL_VOLTAGE_L3(Doc.of(INTEGER) //
+				.unit(Unit.VOLT) //
+				.accessMode(READ_WRITE) //
+				.text("Manual voltage L3")),
+
+		/**
+		 * Manual current L1 value in mA.
+		 */
+		MANUAL_CURRENT_L1(Doc.of(INTEGER) //
+				.unit(MILLIAMPERE) //
+				.accessMode(READ_WRITE) //
+				.text("Manual current L1")),
+
+		/**
+		 * Manual current L2 value in mA.
+		 */
+		MANUAL_CURRENT_L2(Doc.of(INTEGER) //
+				.unit(MILLIAMPERE) //
+				.accessMode(READ_WRITE) //
+				.text("Manual current L2")),
+
+		/**
+		 * Manual current L3 value in mA.
+		 */
+		MANUAL_CURRENT_L3(Doc.of(INTEGER) //
+				.unit(MILLIAMPERE) //
+				.accessMode(READ_WRITE) //
+				.text("Manual current L3")),
 
 		;
 

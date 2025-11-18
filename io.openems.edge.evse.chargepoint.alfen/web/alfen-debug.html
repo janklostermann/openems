@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alfen Eve - Debug/Analyzer</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        h1 { margin: 0 0 20px 0; color: #333; }
+        .config-bar {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            flex-wrap: wrap;
+        }
+        .config-bar label { font-size: 13px; color: #666; }
+        .config-bar input {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .status {
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-size: 13px;
+            font-weight: 500;
+        }
+        .status.connected { background: #E8F5E9; color: #2E7D32; }
+        .status.disconnected { background: #FFEBEE; color: #C62828; }
+        .panel {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .panel h2 {
+            margin: 0 0 15px 0;
+            font-size: 16px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #2196F3;
+        }
+        .register-row {
+            display: grid;
+            grid-template-columns: 100px 1fr 150px 120px 150px 80px;
+            gap: 10px;
+            align-items: center;
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+        }
+        .register-row:hover { background: #f8f8f8; }
+        .register-row .addr {
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 12px;
+            color: #666;
+        }
+        .register-row .name { font-weight: 500; }
+        .register-row .hex {
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 12px;
+            color: #1565C0;
+            background: #E3F2FD;
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+        .register-row .physical {
+            font-weight: 600;
+        }
+        .register-row input[type="number"] {
+            width: 100%;
+            padding: 6px 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: 'Monaco', 'Menlo', monospace;
+        }
+        .register-row input[type="number"]:disabled {
+            background: #f5f5f5;
+            color: #999;
+        }
+        .toggle-switch {
+            position: relative;
+            width: 50px;
+            height: 26px;
+        }
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .3s;
+            border-radius: 26px;
+        }
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 20px;
+            width: 20px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .3s;
+            border-radius: 50%;
+        }
+        input:checked + .toggle-slider {
+            background-color: #4CAF50;
+        }
+        input:checked + .toggle-slider:before {
+            transform: translateX(24px);
+        }
+        .header-row {
+            display: grid;
+            grid-template-columns: 100px 1fr 150px 120px 150px 80px;
+            gap: 10px;
+            padding: 8px 12px;
+            background: #f5f5f5;
+            font-size: 12px;
+            font-weight: 600;
+            color: #666;
+            text-transform: uppercase;
+            border-radius: 4px;
+            margin-bottom: 8px;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 15px;
+        }
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        button.primary { background: #4CAF50; color: white; }
+        button.secondary { background: #2196F3; color: white; }
+        button.danger { background: #f44336; color: white; }
+        button.warning { background: #FF9800; color: white; }
+        .state-indicator {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        .state-A { background: #e0e0e0; color: #666; }
+        .state-B { background: #FFF3E0; color: #E65100; }
+        .state-C { background: #E8F5E9; color: #2E7D32; }
+        .state-D { background: #E3F2FD; color: #1565C0; }
+        .state-E { background: #FFEBEE; color: #C62828; }
+        .state-F { background: #F3E5F5; color: #6A1B9A; }
+        .mode-indicator {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+        .mode-sim { background: #E8F5E9; color: #2E7D32; }
+        .mode-hw { background: #E3F2FD; color: #1565C0; }
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .summary-item {
+            padding: 15px;
+            background: #f8f8f8;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .summary-item .label {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+        .summary-item .value {
+            font-size: 24px;
+            font-weight: 600;
+        }
+        .summary-item .unit {
+            font-size: 12px;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <h1>Alfen Eve - Debug/Analyzer
+        <span id="modeIndicator" class="mode-indicator mode-hw">Hardware</span>
+    </h1>
+
+    <div class="config-bar">
+        <label>OpenEMS URL:</label>
+        <input type="text" id="wsUrl" value="ws://localhost:8085/websocket" style="width: 250px;">
+        <label>Component ID:</label>
+        <input type="text" id="componentId" value="evseChargePoint0" style="width: 150px;">
+        <button class="primary" onclick="connect()">Connect</button>
+        <button class="danger" onclick="disconnect()">Disconnect</button>
+        <div id="connectionStatus" class="status disconnected">Disconnected</div>
+    </div>
+
+    <!-- Summary Panel -->
+    <div class="panel">
+        <h2>Current State</h2>
+        <div class="summary-grid">
+            <div class="summary-item">
+                <div class="label">State</div>
+                <div id="summaryState" class="state-indicator state-A">A</div>
+            </div>
+            <div class="summary-item">
+                <div class="label">Power</div>
+                <div class="value"><span id="summaryPower">0</span></div>
+                <div class="unit">W</div>
+            </div>
+            <div class="summary-item">
+                <div class="label">Energy</div>
+                <div class="value"><span id="summaryEnergy">0</span></div>
+                <div class="unit">kWh</div>
+            </div>
+            <div class="summary-item">
+                <div class="label">Current</div>
+                <div class="value"><span id="summaryCurrent">0</span></div>
+                <div class="unit">A</div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button class="primary" onclick="plugIn()">Plug In</button>
+            <button class="secondary" onclick="unplug()">Unplug</button>
+            <button class="danger" onclick="setError()">Set Error</button>
+            <button onclick="clearError()">Clear Error</button>
+            <span style="margin-left: 20px;">
+                <label>Set Current (mA): </label>
+                <input type="number" id="setCurrentInput" value="16000" style="width: 100px;">
+                <button class="warning" onclick="setCurrent()">Apply</button>
+            </span>
+        </div>
+    </div>
+
+    <!-- Register Details -->
+    <div class="panel">
+        <h2>Register Details</h2>
+        <div class="header-row">
+            <div>Address</div>
+            <div>Name</div>
+            <div>Raw (Hex)</div>
+            <div>Physical</div>
+            <div>Manual Value</div>
+            <div>Use HW</div>
+        </div>
+
+        <!-- Voltage L1 -->
+        <div class="register-row">
+            <div class="addr">306-307</div>
+            <div class="name">Voltage L1</div>
+            <div class="hex" id="rawVoltageL1">0x0000 0x0000</div>
+            <div class="physical"><span id="physVoltageL1">0</span> V</div>
+            <input type="number" id="manualVoltageL1" value="230" step="1">
+            <label class="toggle-switch">
+                <input type="checkbox" id="useHwVoltageL1" checked onchange="toggleOverride('VoltageL1')">
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+
+        <!-- Voltage L2 -->
+        <div class="register-row">
+            <div class="addr">308-309</div>
+            <div class="name">Voltage L2</div>
+            <div class="hex" id="rawVoltageL2">0x0000 0x0000</div>
+            <div class="physical"><span id="physVoltageL2">0</span> V</div>
+            <input type="number" id="manualVoltageL2" value="230" step="1">
+            <label class="toggle-switch">
+                <input type="checkbox" id="useHwVoltageL2" checked onchange="toggleOverride('VoltageL2')">
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+
+        <!-- Voltage L3 -->
+        <div class="register-row">
+            <div class="addr">310-311</div>
+            <div class="name">Voltage L3</div>
+            <div class="hex" id="rawVoltageL3">0x0000 0x0000</div>
+            <div class="physical"><span id="physVoltageL3">0</span> V</div>
+            <input type="number" id="manualVoltageL3" value="230" step="1">
+            <label class="toggle-switch">
+                <input type="checkbox" id="useHwVoltageL3" checked onchange="toggleOverride('VoltageL3')">
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+
+        <!-- Current L1 -->
+        <div class="register-row">
+            <div class="addr">320-321</div>
+            <div class="name">Current L1</div>
+            <div class="hex" id="rawCurrentL1">0x0000 0x0000</div>
+            <div class="physical"><span id="physCurrentL1">0</span> A</div>
+            <input type="number" id="manualCurrentL1" value="0" step="0.1">
+            <label class="toggle-switch">
+                <input type="checkbox" id="useHwCurrentL1" checked onchange="toggleOverride('CurrentL1')">
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+
+        <!-- Current L2 -->
+        <div class="register-row">
+            <div class="addr">322-323</div>
+            <div class="name">Current L2</div>
+            <div class="hex" id="rawCurrentL2">0x0000 0x0000</div>
+            <div class="physical"><span id="physCurrentL2">0</span> A</div>
+            <input type="number" id="manualCurrentL2" value="0" step="0.1">
+            <label class="toggle-switch">
+                <input type="checkbox" id="useHwCurrentL2" checked onchange="toggleOverride('CurrentL2')">
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+
+        <!-- Current L3 -->
+        <div class="register-row">
+            <div class="addr">324-325</div>
+            <div class="name">Current L3</div>
+            <div class="hex" id="rawCurrentL3">0x0000 0x0000</div>
+            <div class="physical"><span id="physCurrentL3">0</span> A</div>
+            <input type="number" id="manualCurrentL3" value="0" step="0.1">
+            <label class="toggle-switch">
+                <input type="checkbox" id="useHwCurrentL3" checked onchange="toggleOverride('CurrentL3')">
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+
+        <!-- Power -->
+        <div class="register-row">
+            <div class="addr">344-347</div>
+            <div class="name">Active Power</div>
+            <div class="hex" id="rawPower">0x0000 0x0000 0x0000 0x0000</div>
+            <div class="physical"><span id="physPower">0</span> W</div>
+            <input type="number" id="manualPower" value="0" step="100">
+            <label class="toggle-switch">
+                <input type="checkbox" id="useHwPower" checked onchange="toggleOverride('Power')">
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+
+        <!-- Energy -->
+        <div class="register-row">
+            <div class="addr">374-377</div>
+            <div class="name">Total Energy</div>
+            <div class="hex" id="rawEnergy">0x0000 0x0000 0x0000 0x0000</div>
+            <div class="physical"><span id="physEnergy">0</span> Wh</div>
+            <input type="number" id="manualEnergy" value="0" step="100" disabled>
+            <label class="toggle-switch">
+                <input type="checkbox" id="useHwEnergy" checked disabled>
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+
+        <!-- State -->
+        <div class="register-row">
+            <div class="addr">1201-1205</div>
+            <div class="name">Charging State</div>
+            <div class="hex" id="rawState">0x0000 0x0000 0x0000 0x0000 0x0000</div>
+            <div class="physical"><span id="physState">A</span></div>
+            <select id="manualState" style="padding: 6px; border-radius: 4px; border: 1px solid #ddd;">
+                <option value="A">A - Unplugged</option>
+                <option value="B">B - Connected</option>
+                <option value="C">C - Charging</option>
+                <option value="D">D - With Ventilation</option>
+                <option value="E">E - Error</option>
+                <option value="F">F - Not Available</option>
+            </select>
+            <label class="toggle-switch">
+                <input type="checkbox" id="useHwState" checked onchange="toggleOverride('State')">
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+
+        <!-- Max Current -->
+        <div class="register-row">
+            <div class="addr">1210-1211</div>
+            <div class="name">Max Current</div>
+            <div class="hex" id="rawMaxCurrent">0x0000 0x0000</div>
+            <div class="physical"><span id="physMaxCurrent">0</span> mA</div>
+            <input type="number" id="manualMaxCurrent" value="16000" step="1000" disabled>
+            <label class="toggle-switch">
+                <input type="checkbox" id="useHwMaxCurrent" checked disabled>
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+
+        <!-- Phase Config -->
+        <div class="register-row">
+            <div class="addr">1215</div>
+            <div class="name">Phase Config</div>
+            <div class="hex" id="rawPhases">0x0003</div>
+            <div class="physical"><span id="physPhases">3</span> phases</div>
+            <select id="manualPhases" style="padding: 6px; border-radius: 4px; border: 1px solid #ddd;" disabled>
+                <option value="1">1 Phase</option>
+                <option value="3" selected>3 Phases</option>
+            </select>
+            <label class="toggle-switch">
+                <input type="checkbox" id="useHwPhases" checked disabled>
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let componentId = 'evseChargePoint0';
+        let messageId = 0;
+
+        function connect() {
+            const url = document.getElementById('wsUrl').value;
+            componentId = document.getElementById('componentId').value;
+
+            if (ws) ws.close();
+
+            ws = new WebSocket(url);
+            ws.onopen = () => {
+                updateConnectionStatus(true);
+                authenticate();
+            };
+            ws.onmessage = (event) => handleMessage(JSON.parse(event.data));
+            ws.onclose = () => updateConnectionStatus(false);
+            ws.onerror = () => updateConnectionStatus(false);
+        }
+
+        function disconnect() {
+            if (ws) { ws.close(); ws = null; }
+        }
+
+        function updateConnectionStatus(connected) {
+            const status = document.getElementById('connectionStatus');
+            status.textContent = connected ? 'Connected' : 'Disconnected';
+            status.className = 'status ' + (connected ? 'connected' : 'disconnected');
+        }
+
+        function authenticate() {
+            send({
+                jsonrpc: '2.0',
+                id: messageId++,
+                method: 'authenticateWithPassword',
+                params: { password: 'guest' }
+            });
+        }
+
+        function subscribeChannels() {
+            const channels = [
+                // Standard channels
+                'ChargingState', 'RawChargingState',
+                'ActivePower', 'ActivePowerL1', 'ActivePowerL2', 'ActivePowerL3',
+                'VoltageL1', 'VoltageL2', 'VoltageL3',
+                'CurrentL1', 'CurrentL2', 'CurrentL3',
+                'ActiveProductionEnergy', 'ActiveConsumptionEnergy',
+                // Debug channels
+                'SimulationMode', 'DebugMode',
+                'RawVoltageL1', 'RawVoltageL2', 'RawVoltageL3',
+                'RawCurrentL1', 'RawCurrentL2', 'RawCurrentL3',
+                'RawPower', 'RawEnergy', 'RawState', 'RawMaxCurrent'
+            ].map(ch => componentId + '/' + ch);
+
+            send({
+                jsonrpc: '2.0',
+                id: messageId++,
+                method: 'subscribeChannels',
+                params: { count: 0, channels: channels }
+            });
+        }
+
+        function handleMessage(msg) {
+            if (msg.result && msg.result.token) {
+                subscribeChannels();
+            } else if (msg.method === 'currentData') {
+                updateData(msg.params);
+            }
+        }
+
+        function updateData(params) {
+            if (!params || !params[componentId]) return;
+            const d = params[componentId];
+
+            // Update mode indicator
+            const isSimMode = d.SimulationMode === true;
+            const indicator = document.getElementById('modeIndicator');
+            indicator.textContent = isSimMode ? 'Simulation' : 'Hardware';
+            indicator.className = 'mode-indicator ' + (isSimMode ? 'mode-sim' : 'mode-hw');
+
+            // Update summary
+            const state = d.ChargingState || 'A';
+            const stateElem = document.getElementById('summaryState');
+            stateElem.textContent = state;
+            stateElem.className = 'state-indicator state-' + state.charAt(0);
+
+            document.getElementById('summaryPower').textContent = d.ActivePower || 0;
+            document.getElementById('summaryEnergy').textContent = ((d.ActiveConsumptionEnergy || 0) / 1000).toFixed(1);
+            document.getElementById('summaryCurrent').textContent = ((d.CurrentL1 || 0) / 1000).toFixed(1);
+
+            // Update physical values
+            document.getElementById('physVoltageL1').textContent = ((d.VoltageL1 || 0) / 1000).toFixed(1);
+            document.getElementById('physVoltageL2').textContent = ((d.VoltageL2 || 0) / 1000).toFixed(1);
+            document.getElementById('physVoltageL3').textContent = ((d.VoltageL3 || 0) / 1000).toFixed(1);
+            document.getElementById('physCurrentL1').textContent = ((d.CurrentL1 || 0) / 1000).toFixed(2);
+            document.getElementById('physCurrentL2').textContent = ((d.CurrentL2 || 0) / 1000).toFixed(2);
+            document.getElementById('physCurrentL3').textContent = ((d.CurrentL3 || 0) / 1000).toFixed(2);
+            document.getElementById('physPower').textContent = d.ActivePower || 0;
+            document.getElementById('physEnergy').textContent = d.ActiveConsumptionEnergy || 0;
+            document.getElementById('physState').textContent = state;
+
+            // Update raw register displays
+            if (d.RawVoltageL1) document.getElementById('rawVoltageL1').textContent = d.RawVoltageL1;
+            if (d.RawVoltageL2) document.getElementById('rawVoltageL2').textContent = d.RawVoltageL2;
+            if (d.RawVoltageL3) document.getElementById('rawVoltageL3').textContent = d.RawVoltageL3;
+            if (d.RawCurrentL1) document.getElementById('rawCurrentL1').textContent = d.RawCurrentL1;
+            if (d.RawCurrentL2) document.getElementById('rawCurrentL2').textContent = d.RawCurrentL2;
+            if (d.RawCurrentL3) document.getElementById('rawCurrentL3').textContent = d.RawCurrentL3;
+            if (d.RawPower) document.getElementById('rawPower').textContent = d.RawPower;
+            if (d.RawEnergy) document.getElementById('rawEnergy').textContent = d.RawEnergy;
+            if (d.RawState) document.getElementById('rawState').textContent = d.RawState;
+            if (d.RawMaxCurrent) document.getElementById('rawMaxCurrent').textContent = d.RawMaxCurrent;
+        }
+
+        function send(msg) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify(msg));
+            }
+        }
+
+        function setChannel(channel, value) {
+            send({
+                jsonrpc: '2.0',
+                id: messageId++,
+                method: 'setChannelValue',
+                params: {
+                    componentId: componentId,
+                    channelId: channel,
+                    value: value
+                }
+            });
+        }
+
+        function plugIn() { setChannel('SimulatePlugIn', true); }
+        function unplug() { setChannel('SimulateUnplug', true); }
+        function setError() { setChannel('SimulateError', true); }
+        function clearError() { setChannel('SimulateClearError', true); }
+
+        function setCurrent() {
+            const value = parseInt(document.getElementById('setCurrentInput').value);
+            setChannel('SetChargingCurrent', value);
+        }
+
+        function toggleOverride(name) {
+            const useHw = document.getElementById('useHw' + name).checked;
+            const manualInput = document.getElementById('manual' + name);
+            if (manualInput) {
+                manualInput.disabled = useHw;
+            }
+
+            // Send override flag to component
+            // This would need corresponding channel support
+            // setChannel('Override' + name, !useHw);
+        }
+
+        // Auto-connect with URL params
+        window.onload = () => {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('url')) document.getElementById('wsUrl').value = params.get('url');
+            if (params.get('component')) document.getElementById('componentId').value = params.get('component');
+            if (params.get('autoconnect') === 'true') connect();
+        };
+    </script>
+</body>
+</html>

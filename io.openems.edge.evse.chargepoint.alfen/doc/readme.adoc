@@ -129,7 +129,12 @@ The following registers are implemented based on the Alfen Modbus Slave TCP/IP d
 |debugMode
 |Boolean
 |false
-|Enable debug logging
+|Enable debug mode with raw register visualization
+
+|simulationMode
+|Boolean
+|false
+|Use internal simulator instead of real hardware (no Modbus connection required)
 
 |phaseRotation
 |PhaseRotation
@@ -158,11 +163,156 @@ The following registers are implemented based on the Alfen Modbus Slave TCP/IP d
   "enabled": true,
   "readOnly": false,
   "debugMode": false,
+  "simulationMode": false,
   "phaseRotation": "L1_L2_L3",
   "modbus_id": "modbus0",
   "modbusUnitId": 1
 }
 ----
+
+== Simulation Mode
+
+Simulation mode allows testing without real hardware. When enabled, the component uses an internal IEC 61851-1 state machine instead of communicating with a physical charger.
+
+=== Configuration
+
+[source,json]
+----
+{
+  "id": "evseChargePoint0",
+  "alias": "Alfen Simulator",
+  "enabled": true,
+  "simulationMode": true
+}
+----
+
+=== Control Channels
+
+[cols="1,1,2"]
+|===
+| Channel | Type | Description
+
+| `SimulationMode`
+| Boolean
+| Indicates simulation mode is active
+
+| `SimulatePlugIn`
+| Boolean (R/W)
+| Set to `true` to simulate plugging in a vehicle
+
+| `SimulateUnplug`
+| Boolean (R/W)
+| Set to `true` to simulate unplugging a vehicle
+
+| `SimulateError`
+| Boolean (R/W)
+| Set to `true` to trigger an error state
+
+| `SimulateClearError`
+| Boolean (R/W)
+| Set to `true` to clear the error state
+|===
+
+=== State Transitions
+
+* *A → B*: `SimulatePlugIn` - Vehicle connects
+* *B → C*: Automatic when `SetChargingCurrent` > 6000 mA
+* *C → B*: `SetChargingCurrent(0)` - Stop charging
+* *B → A*: `SimulateUnplug` - Vehicle disconnects
+* *Any → E*: `SimulateError` - Error condition
+* *E → A*: `SimulateClearError` - Resume from error
+
+== Debug Mode
+
+Debug mode provides raw Modbus register visualization for troubleshooting and development.
+
+=== Configuration
+
+Enable debug mode by setting `debugMode: true` in the component configuration.
+
+=== Debug Channels
+
+[cols="1,1,2"]
+|===
+| Channel | Type | Description
+
+| `DebugMode`
+| Boolean
+| Indicates debug mode is active
+
+| `RawVoltageL1/L2/L3`
+| String
+| Raw voltage registers in hex (Float32 encoding)
+
+| `RawCurrentL1/L2/L3`
+| String
+| Raw current registers in hex (Float32 encoding)
+
+| `RawPower`
+| String
+| Raw power registers in hex (Float64 encoding)
+
+| `RawEnergy`
+| String
+| Raw energy registers in hex (Float64 encoding)
+
+| `RawState`
+| String
+| Raw state registers in hex
+
+| `RawMaxCurrent`
+| String
+| Raw max current registers in hex
+|===
+
+=== Override Channels
+
+These channels allow overriding hardware values with manual inputs for testing:
+
+[cols="1,1,2"]
+|===
+| Channel | Type | Description
+
+| `OverrideVoltage`
+| Boolean (R/W)
+| Use manual voltage values instead of hardware
+
+| `OverrideCurrent`
+| Boolean (R/W)
+| Use manual current values instead of hardware
+
+| `OverridePower`
+| Boolean (R/W)
+| Use manual power values instead of hardware
+
+| `OverrideState`
+| Boolean (R/W)
+| Use manual state value instead of hardware
+
+| `ManualVoltageL1/L2/L3`
+| Integer (R/W)
+| Manual voltage values in V
+
+| `ManualCurrentL1/L2/L3`
+| Integer (R/W)
+| Manual current values in mA
+|===
+
+=== Debug HTML Page
+
+A standalone HTML debug page is provided at `web/alfen-debug.html` for visualizing and controlling the component. It shows:
+
+* State, power, energy summary
+* Raw Modbus register values in hex format
+* Manual value inputs
+* Override toggles
+
+To use:
+
+1. Open `web/alfen-debug.html` in a browser
+2. Configure the OpenEMS WebSocket URL (default: `ws://localhost:8085/websocket`)
+3. Enter the component ID (default: `evseChargePoint0`)
+4. Click "Connect"
 
 == References
 
