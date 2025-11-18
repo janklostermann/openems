@@ -282,7 +282,7 @@
             <div class="name">Voltage L1</div>
             <div class="hex" id="rawVoltageL1">0x0000 0x0000</div>
             <div class="physical"><span id="physVoltageL1">0</span> V</div>
-            <input type="number" id="manualVoltageL1" value="230" step="1">
+            <input type="number" id="manualVoltageL1" value="230" step="1" disabled>
             <label class="toggle-switch">
                 <input type="checkbox" id="useHwVoltageL1" checked onchange="toggleOverride('VoltageL1')">
                 <span class="toggle-slider"></span>
@@ -295,7 +295,7 @@
             <div class="name">Voltage L2</div>
             <div class="hex" id="rawVoltageL2">0x0000 0x0000</div>
             <div class="physical"><span id="physVoltageL2">0</span> V</div>
-            <input type="number" id="manualVoltageL2" value="230" step="1">
+            <input type="number" id="manualVoltageL2" value="230" step="1" disabled>
             <label class="toggle-switch">
                 <input type="checkbox" id="useHwVoltageL2" checked onchange="toggleOverride('VoltageL2')">
                 <span class="toggle-slider"></span>
@@ -308,7 +308,7 @@
             <div class="name">Voltage L3</div>
             <div class="hex" id="rawVoltageL3">0x0000 0x0000</div>
             <div class="physical"><span id="physVoltageL3">0</span> V</div>
-            <input type="number" id="manualVoltageL3" value="230" step="1">
+            <input type="number" id="manualVoltageL3" value="230" step="1" disabled>
             <label class="toggle-switch">
                 <input type="checkbox" id="useHwVoltageL3" checked onchange="toggleOverride('VoltageL3')">
                 <span class="toggle-slider"></span>
@@ -321,7 +321,7 @@
             <div class="name">Current L1</div>
             <div class="hex" id="rawCurrentL1">0x0000 0x0000</div>
             <div class="physical"><span id="physCurrentL1">0</span> A</div>
-            <input type="number" id="manualCurrentL1" value="0" step="0.1">
+            <input type="number" id="manualCurrentL1" value="0" step="0.1" disabled>
             <label class="toggle-switch">
                 <input type="checkbox" id="useHwCurrentL1" checked onchange="toggleOverride('CurrentL1')">
                 <span class="toggle-slider"></span>
@@ -334,7 +334,7 @@
             <div class="name">Current L2</div>
             <div class="hex" id="rawCurrentL2">0x0000 0x0000</div>
             <div class="physical"><span id="physCurrentL2">0</span> A</div>
-            <input type="number" id="manualCurrentL2" value="0" step="0.1">
+            <input type="number" id="manualCurrentL2" value="0" step="0.1" disabled>
             <label class="toggle-switch">
                 <input type="checkbox" id="useHwCurrentL2" checked onchange="toggleOverride('CurrentL2')">
                 <span class="toggle-slider"></span>
@@ -347,7 +347,7 @@
             <div class="name">Current L3</div>
             <div class="hex" id="rawCurrentL3">0x0000 0x0000</div>
             <div class="physical"><span id="physCurrentL3">0</span> A</div>
-            <input type="number" id="manualCurrentL3" value="0" step="0.1">
+            <input type="number" id="manualCurrentL3" value="0" step="0.1" disabled>
             <label class="toggle-switch">
                 <input type="checkbox" id="useHwCurrentL3" checked onchange="toggleOverride('CurrentL3')">
                 <span class="toggle-slider"></span>
@@ -360,7 +360,7 @@
             <div class="name">Active Power</div>
             <div class="hex" id="rawPower">0x0000 0x0000 0x0000 0x0000</div>
             <div class="physical"><span id="physPower">0</span> W</div>
-            <input type="number" id="manualPower" value="0" step="100">
+            <input type="number" id="manualPower" value="0" step="100" disabled>
             <label class="toggle-switch">
                 <input type="checkbox" id="useHwPower" checked onchange="toggleOverride('Power')">
                 <span class="toggle-slider"></span>
@@ -386,7 +386,7 @@
             <div class="name">Charging State</div>
             <div class="hex" id="rawState">0x0000 0x0000 0x0000 0x0000 0x0000</div>
             <div class="physical"><span id="physState">A</span></div>
-            <select id="manualState" style="padding: 6px; border-radius: 4px; border: 1px solid #ddd;">
+            <select id="manualState" style="padding: 6px; border-radius: 4px; border: 1px solid #ddd;" disabled>
                 <option value="A">A - Unplugged</option>
                 <option value="B">B - Connected</option>
                 <option value="C">C - Charging</option>
@@ -581,9 +581,53 @@
                 manualInput.disabled = useHw;
             }
 
-            // Send override flag to component
-            // This would need corresponding channel support
-            // setChannel('Override' + name, !useHw);
+            // Map individual register names to override categories
+            const overrideMap = {
+                'VoltageL1': 'Voltage', 'VoltageL2': 'Voltage', 'VoltageL3': 'Voltage',
+                'CurrentL1': 'Current', 'CurrentL2': 'Current', 'CurrentL3': 'Current',
+                'Power': 'Power', 'State': 'State'
+            };
+            const overrideCategory = overrideMap[name];
+            if (overrideCategory) {
+                setChannel('Override' + overrideCategory, !useHw);
+            }
+
+            // If switching to manual mode, send the manual value
+            if (!useHw && manualInput) {
+                const value = manualInput.tagName === 'SELECT'
+                    ? manualInput.value
+                    : parseFloat(manualInput.value);
+
+                // Convert values to correct units for component channels (mV for voltage, mA for current)
+                let channelValue = value;
+                if (name.startsWith('Voltage')) {
+                    channelValue = Math.round(value * 1000); // V to mV
+                } else if (name.startsWith('Current')) {
+                    channelValue = Math.round(value * 1000); // A to mA
+                }
+
+                setChannel('Manual' + name, channelValue);
+            }
+        }
+
+        // Also send manual values when they change
+        function onManualValueChange(name) {
+            const useHw = document.getElementById('useHw' + name).checked;
+            if (!useHw) {
+                const manualInput = document.getElementById('manual' + name);
+                const value = manualInput.tagName === 'SELECT'
+                    ? manualInput.value
+                    : parseFloat(manualInput.value);
+
+                let channelValue = value;
+                if (name.startsWith('Voltage')) {
+                    channelValue = Math.round(value * 1000);
+                } else if (name.startsWith('Current')) {
+                    channelValue = Math.round(value * 1000);
+                }
+
+                setChannel('Manual' + name, channelValue);
+            }
         }
 
         // Auto-connect with URL params
