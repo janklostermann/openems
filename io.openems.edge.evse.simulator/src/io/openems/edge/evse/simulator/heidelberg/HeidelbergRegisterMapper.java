@@ -1,6 +1,8 @@
 package io.openems.edge.evse.simulator.heidelberg;
 
-import io.openems.edge.bridge.modbus.test.DummyModbusBridge;
+import com.ghgande.j2mod.modbus.procimg.SimpleProcessImage;
+import com.ghgande.j2mod.modbus.procimg.SimpleRegister;
+
 import io.openems.edge.evse.simulator.core.ChargePointSimulatorCore;
 import io.openems.edge.evse.simulator.core.ChargePointState;
 import io.openems.edge.evse.simulator.core.ModbusRegisterMapper;
@@ -36,54 +38,56 @@ public class HeidelbergRegisterMapper implements ModbusRegisterMapper {
 	private static final int REG_PHASE_SWITCH = 501;
 
 	@Override
-	public void updateRegisters(DummyModbusBridge modbus, ChargePointSimulatorCore core) {
+	public void updateRegisters(SimpleProcessImage pi, ChargePointSimulatorCore core) {
 		// Input Registers (FC4) - Heidelberg uses these for readings
 		// Layout version
-		modbus.withInputRegister(REG_LAYOUT_VERSION, 0x0108); // V1.0.8
+		pi.addInputRegister(REG_LAYOUT_VERSION, new SimpleRegister(0x0108)); // V1.0.8
 
 		// Charging state (Heidelberg uses specific state codes)
-		modbus.withInputRegister(REG_CHARGING_STATE, stateToHeidelbergCode(core.getState()));
+		pi.addInputRegister(REG_CHARGING_STATE, new SimpleRegister(stateToHeidelbergCode(core.getState())));
 
 		// Currents in 10mA units (scale factor 2 = divide by 100 to get A)
 		int currentMa10 = (int) (core.getCurrentAmps() * 100);
 		int currentL2 = (core.getPhases() == 3) ? currentMa10 : 0;
 		int currentL3 = (core.getPhases() == 3) ? currentMa10 : 0;
-		modbus.withInputRegister(REG_CURRENT_L1, currentMa10);
-		modbus.withInputRegister(REG_CURRENT_L2, currentL2);
-		modbus.withInputRegister(REG_CURRENT_L3, currentL3);
+		pi.addInputRegister(REG_CURRENT_L1, new SimpleRegister(currentMa10));
+		pi.addInputRegister(REG_CURRENT_L2, new SimpleRegister(currentL2));
+		pi.addInputRegister(REG_CURRENT_L3, new SimpleRegister(currentL3));
 
 		// Temperature (deci-degrees Celsius)
-		modbus.withInputRegister(REG_TEMPERATURE, 250); // 25.0°C
+		pi.addInputRegister(REG_TEMPERATURE, new SimpleRegister(250)); // 25.0°C
 
 		// Voltages in V
-		modbus.withInputRegister(REG_VOLTAGE_L1, (int) core.getVoltageL1());
-		modbus.withInputRegister(REG_VOLTAGE_L2, (int) core.getVoltageL2());
-		modbus.withInputRegister(REG_VOLTAGE_L3, (int) core.getVoltageL3());
+		pi.addInputRegister(REG_VOLTAGE_L1, new SimpleRegister((int) core.getVoltageL1()));
+		pi.addInputRegister(REG_VOLTAGE_L2, new SimpleRegister((int) core.getVoltageL2()));
+		pi.addInputRegister(REG_VOLTAGE_L3, new SimpleRegister((int) core.getVoltageL3()));
 
 		// Lock state (1 = unlocked)
-		modbus.withInputRegister(REG_LOCK_STATE, 1);
+		pi.addInputRegister(REG_LOCK_STATE, new SimpleRegister(1));
 
 		// Active power in W
-		modbus.withInputRegister(REG_ACTIVE_POWER, (int) core.getPowerWatts());
+		pi.addInputRegister(REG_ACTIVE_POWER, new SimpleRegister((int) core.getPowerWatts()));
 
 		// Energy (doubleword, Wh)
 		long energyWh = (long) core.getTotalEnergyWh();
-		modbus.withInputRegisters(REG_ENERGY, (int) (energyWh >> 16), (int) (energyWh & 0xFFFF));
+		pi.addInputRegister(REG_ENERGY, new SimpleRegister((int) (energyWh >> 16)));
+		pi.addInputRegister(REG_ENERGY + 1, new SimpleRegister((int) (energyWh & 0xFFFF)));
 
 		// Session energy
 		long sessionWh = (long) core.getSessionEnergyWh();
-		modbus.withInputRegisters(REG_SESSION_ENERGY, (int) (sessionWh >> 16), (int) (sessionWh & 0xFFFF));
+		pi.addInputRegister(REG_SESSION_ENERGY, new SimpleRegister((int) (sessionWh >> 16)));
+		pi.addInputRegister(REG_SESSION_ENERGY + 1, new SimpleRegister((int) (sessionWh & 0xFFFF)));
 
 		// Max/Min current
-		modbus.withInputRegister(REG_MAX_CURRENT, core.getMaxCurrentMa() / 1000);
-		modbus.withInputRegister(REG_MIN_CURRENT, core.getMinCurrentMa() / 1000);
+		pi.addInputRegister(REG_MAX_CURRENT, new SimpleRegister(core.getMaxCurrentMa() / 1000));
+		pi.addInputRegister(REG_MIN_CURRENT, new SimpleRegister(core.getMinCurrentMa() / 1000));
 
 		// Holding Registers (FC3)
 		// Set current in 10mA units
-		modbus.withRegister(REG_SET_CURRENT, core.getSetCurrentMa() / 10);
+		pi.addRegister(REG_SET_CURRENT, new SimpleRegister(core.getSetCurrentMa() / 10));
 
 		// Phase switch (1 = single, 3 = three)
-		modbus.withRegister(REG_PHASE_SWITCH, core.getPhases());
+		pi.addRegister(REG_PHASE_SWITCH, new SimpleRegister(core.getPhases()));
 	}
 
 	/**

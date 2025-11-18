@@ -1,6 +1,6 @@
 package io.openems.edge.evse.simulator.core;
 
-import io.openems.edge.bridge.modbus.test.DummyModbusBridge;
+import com.ghgande.j2mod.modbus.procimg.SimpleProcessImage;
 
 /**
  * Interface for device-specific Modbus register mapping.
@@ -12,14 +12,14 @@ import io.openems.edge.bridge.modbus.test.DummyModbusBridge;
 public interface ModbusRegisterMapper {
 
 	/**
-	 * Update the {@link DummyModbusBridge} registers based on simulator state.
+	 * Update the {@link SimpleProcessImage} registers based on simulator state.
 	 *
 	 * <p>
 	 * This is called after each state change to synchronize the Modbus registers
 	 * with the current simulator state.
 	 *
-	 * @param modbus the {@link DummyModbusBridge} to update
-	 * @param core   the {@link ChargePointSimulatorCore} with current state
+	 * @param processImage the {@link SimpleProcessImage} to update
+	 * @param core         the {@link ChargePointSimulatorCore} with current state
 	 */
-	void updateRegisters(DummyModbusBridge modbus, ChargePointSimulatorCore core);
+	void updateRegisters(SimpleProcessImage processImage, ChargePointSimulatorCore core);
 }

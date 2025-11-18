@@ -1,5 +1,9 @@
 package io.openems.edge.evse.simulator.core;
 
+import java.lang.reflect.Field;
+
+import com.ghgande.j2mod.modbus.procimg.SimpleProcessImage;
+
 import io.openems.edge.bridge.modbus.test.DummyModbusBridge;
 import io.openems.edge.evse.simulator.abl.AblRegisterMapper;
 import io.openems.edge.evse.simulator.alfen.AlfenRegisterMapper;
@@ -30,6 +34,37 @@ public class ChargePointSimulator {
 		this.core = new ChargePointSimulatorCore();
 		this.mapper = mapper;
 		this.updateRegisters();
+	}
+
+	/**
+	 * Access DummyModbusBridge's internal process image via reflection.
+	 */
+	private SimpleProcessImage getOrCreateProcessImage() {
+		try {
+			Field field = DummyModbusBridge.class.getDeclaredField("processImage");
+			field.setAccessible(true);
+			SimpleProcessImage pi = (SimpleProcessImage) field.get(this.modbus);
+			if (pi == null) {
+				pi = new SimpleProcessImage();
+				field.set(this.modbus, pi);
+			}
+			return pi;
+		} catch (Exception e) {
+			throw new RuntimeException("Failed to access DummyModbusBridge processImage", e);
+		}
+	}
+
+	/**
+	 * Replace the process image with a new one.
+	 */
+	private void setProcessImage(SimpleProcessImage pi) {
+		try {
+			Field field = DummyModbusBridge.class.getDeclaredField("processImage");
+			field.setAccessible(true);
+			field.set(this.modbus, pi);
+		} catch (Exception e) {
+			throw new RuntimeException("Failed to set DummyModbusBridge processImage", e);
+		}
 	}
 
 	/**
@@ -237,6 +272,9 @@ public class ChargePointSimulator {
 	 * Update all Modbus registers from current state.
 	 */
 	private void updateRegisters() {
-		this.mapper.updateRegisters(this.modbus, this.core);
+		// Create a new process image and populate it
+		var pi = new SimpleProcessImage();
+		this.mapper.updateRegisters(pi, this.core);
+		this.setProcessImage(pi);
 	}
 }

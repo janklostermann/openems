@@ -1,6 +1,8 @@
 package io.openems.edge.evse.simulator.abl;
 
-import io.openems.edge.bridge.modbus.test.DummyModbusBridge;
+import com.ghgande.j2mod.modbus.procimg.SimpleProcessImage;
+import com.ghgande.j2mod.modbus.procimg.SimpleRegister;
+
 import io.openems.edge.evse.simulator.core.ChargePointSimulatorCore;
 import io.openems.edge.evse.simulator.core.ChargePointState;
 import io.openems.edge.evse.simulator.core.ModbusRegisterMapper;
@@ -46,29 +48,34 @@ public class AblRegisterMapper implements ModbusRegisterMapper {
 	}
 
 	@Override
-	public void updateRegisters(DummyModbusBridge modbus, ChargePointSimulatorCore core) {
+	public void updateRegisters(SimpleProcessImage pi, ChargePointSimulatorCore core) {
 		// Currents as doubleword in 10mA units (scale factor 2)
 		int currentMa10 = (int) (core.getCurrentAmps() * 100);
 		int currentL2 = (core.getPhases() == 3) ? currentMa10 : 0;
 		int currentL3 = (core.getPhases() == 3) ? currentMa10 : 0;
 
-		modbus.withRegisters(REG_CURRENT_L1 + this.offset, 0, currentMa10);
-		modbus.withRegisters(REG_CURRENT_L2 + this.offset, 0, currentL2);
-		modbus.withRegisters(REG_CURRENT_L3 + this.offset, 0, currentL3);
+		pi.addRegister(REG_CURRENT_L1 + this.offset, new SimpleRegister(0));
+		pi.addRegister(REG_CURRENT_L1 + this.offset + 1, new SimpleRegister(currentMa10));
+		pi.addRegister(REG_CURRENT_L2 + this.offset, new SimpleRegister(0));
+		pi.addRegister(REG_CURRENT_L2 + this.offset + 1, new SimpleRegister(currentL2));
+		pi.addRegister(REG_CURRENT_L3 + this.offset, new SimpleRegister(0));
+		pi.addRegister(REG_CURRENT_L3 + this.offset + 1, new SimpleRegister(currentL3));
 
 		// Active power as doubleword in W
 		int powerW = (int) core.getPowerWatts();
-		modbus.withRegisters(REG_ACTIVE_POWER + this.offset, 0, powerW);
+		pi.addRegister(REG_ACTIVE_POWER + this.offset, new SimpleRegister(0));
+		pi.addRegister(REG_ACTIVE_POWER + this.offset + 1, new SimpleRegister(powerW));
 
 		// Energy as doubleword in Wh
 		int energyWh = (int) core.getTotalEnergyWh();
-		modbus.withRegisters(REG_ENERGY + this.offset, 0, energyWh);
+		pi.addRegister(REG_ENERGY + this.offset, new SimpleRegister(0));
+		pi.addRegister(REG_ENERGY + this.offset + 1, new SimpleRegister(energyWh));
 
 		// Charge point state
-		modbus.withRegister(REG_CHARGE_POINT_STATE + this.offset, stateToAblCode(core.getState()));
+		pi.addRegister(REG_CHARGE_POINT_STATE + this.offset, new SimpleRegister(stateToAblCode(core.getState())));
 
 		// Current limit in 0.1A units (scale factor -1)
-		modbus.withRegister(REG_CURRENT_LIMIT + this.offset, core.getSetCurrentMa() / 100);
+		pi.addRegister(REG_CURRENT_LIMIT + this.offset, new SimpleRegister(core.getSetCurrentMa() / 100));
 	}
 
 	/**

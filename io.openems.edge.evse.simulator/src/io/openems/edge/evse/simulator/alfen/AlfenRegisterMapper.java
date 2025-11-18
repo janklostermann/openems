@@ -1,6 +1,8 @@
 package io.openems.edge.evse.simulator.alfen;
 
-import io.openems.edge.bridge.modbus.test.DummyModbusBridge;
+import com.ghgande.j2mod.modbus.procimg.SimpleProcessImage;
+import com.ghgande.j2mod.modbus.procimg.SimpleRegister;
+
 import io.openems.edge.evse.simulator.core.ChargePointSimulatorCore;
 import io.openems.edge.evse.simulator.core.ChargePointState;
 import io.openems.edge.evse.simulator.core.ModbusRegisterMapper;
@@ -24,9 +26,9 @@ public class AlfenRegisterMapper implements ModbusRegisterMapper {
 	private static final int REG_PHASES = 1215;
 
 	@Override
-	public void updateRegisters(DummyModbusBridge modbus, ChargePointSimulatorCore core) {
+	public void updateRegisters(SimpleProcessImage pi, ChargePointSimulatorCore core) {
 		// Voltages (register 306-311, 3x Float32)
-		modbus.withRegisters(REG_VOLTAGE_L1, //
+		addRegisters(pi, REG_VOLTAGE_L1, //
 				floatToRegisters((float) core.getVoltageL1()), //
 				floatToRegisters((float) core.getVoltageL2()), //
 				floatToRegisters((float) core.getVoltageL3()));
@@ -35,29 +37,45 @@ public class AlfenRegisterMapper implements ModbusRegisterMapper {
 		float current = (float) core.getCurrentAmps();
 		float currentL2 = (core.getPhases() == 3) ? current : 0f;
 		float currentL3 = (core.getPhases() == 3) ? current : 0f;
-		modbus.withRegisters(REG_CURRENT_L1, //
+		addRegisters(pi, REG_CURRENT_L1, //
 				floatToRegisters(current), //
 				floatToRegisters(currentL2), //
 				floatToRegisters(currentL3));
 
 		// Power (register 344-347, Float64)
-		modbus.withRegisters(REG_POWER, //
+		addRegisters(pi, REG_POWER, //
 				doubleToRegisters(core.getPowerWatts()));
 
 		// Total energy (register 374-377, Float64)
-		modbus.withRegisters(REG_ENERGY, //
+		addRegisters(pi, REG_ENERGY, //
 				doubleToRegisters(core.getTotalEnergyWh()));
 
 		// Charging state (register 1201-1205, String 5 registers)
-		modbus.withRegisters(REG_CHARGING_STATE, //
+		addRegisters(pi, REG_CHARGING_STATE, //
 				stateToRegisters(core.getState()));
 
 		// Max current (register 1210-1211, Float32 in mA)
-		modbus.withRegisters(REG_MAX_CURRENT, //
+		addRegisters(pi, REG_MAX_CURRENT, //
 				floatToRegisters((float) core.getSetCurrentMa()));
 
 		// Phase configuration (register 1215, Uint16)
-		modbus.withRegister(REG_PHASES, core.getPhases());
+		pi.addRegister(REG_PHASES, new SimpleRegister(core.getPhases()));
+	}
+
+	/**
+	 * Add multiple register arrays to the process image.
+	 *
+	 * @param pi           the process image
+	 * @param startAddress the starting address
+	 * @param arrays       arrays of register values
+	 */
+	private static void addRegisters(SimpleProcessImage pi, int startAddress, int[]... arrays) {
+		int address = startAddress;
+		for (var arr : arrays) {
+			for (int value : arr) {
+				pi.addRegister(address++, new SimpleRegister(value));
+			}
+		}
 	}
 
 	/**
