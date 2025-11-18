@@ -21,7 +21,7 @@ import io.openems.edge.meter.api.PhaseRotation;
 	@AttributeDefinition(name = "Read only", description = "Defines that this EVSE is read only.", required = true)
 	boolean readOnly() default false;
 
-	@AttributeDefinition(name = "Debug Mode", description = "Activates the debug mode with raw register visualization. Use web/alfen-debug.html for visualization.")
+	@AttributeDefinition(name = "Debug Mode", description = "Activates the debug mode with raw register visualization. Open: http://localhost:8084/openems/edge/io.openems.edge.evse.chargepoint.alfen/alfen-debug.html")
 	boolean debugMode() default false;
 
 	@AttributeDefinition(name = "Simulation Mode", description = "Use internal simulator instead of real hardware (no Modbus connection required)")
