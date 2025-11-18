@@ -1,7 +1,10 @@
 package io.openems.edge.evse.simulator.core;
 
 import io.openems.edge.bridge.modbus.test.DummyModbusBridge;
+import io.openems.edge.evse.simulator.abl.AblRegisterMapper;
 import io.openems.edge.evse.simulator.alfen.AlfenRegisterMapper;
+import io.openems.edge.evse.simulator.heidelberg.HeidelbergRegisterMapper;
+import io.openems.edge.evse.simulator.keba.KebaRegisterMapper;
 
 /**
  * Chargepoint simulator for testing.
@@ -37,6 +40,36 @@ public class ChargePointSimulator {
 	 */
 	public static ChargePointSimulator alfen(String modbusId) {
 		return new ChargePointSimulator(modbusId, new AlfenRegisterMapper());
+	}
+
+	/**
+	 * Factory method for Heidelberg chargepoint simulator.
+	 *
+	 * @param modbusId the Modbus bridge ID
+	 * @return a new {@link ChargePointSimulator} configured for Heidelberg
+	 */
+	public static ChargePointSimulator heidelberg(String modbusId) {
+		return new ChargePointSimulator(modbusId, new HeidelbergRegisterMapper());
+	}
+
+	/**
+	 * Factory method for ABL chargepoint simulator.
+	 *
+	 * @param modbusId the Modbus bridge ID
+	 * @return a new {@link ChargePointSimulator} configured for ABL
+	 */
+	public static ChargePointSimulator abl(String modbusId) {
+		return new ChargePointSimulator(modbusId, new AblRegisterMapper());
+	}
+
+	/**
+	 * Factory method for Keba chargepoint simulator.
+	 *
+	 * @param modbusId the Modbus bridge ID
+	 * @return a new {@link ChargePointSimulator} configured for Keba
+	 */
+	public static ChargePointSimulator keba(String modbusId) {
+		return new ChargePointSimulator(modbusId, new KebaRegisterMapper());
 	}
 
 	/**
