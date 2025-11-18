@@ -1,0 +1,186 @@
+= Alfen Eve Chargepoint Component
+
+This component provides integration for Alfen Eve series wallboxes (NG9xx platform) via Modbus TCP.
+
+== Supported Models
+
+* Alfen Eve Single S-line
+* Alfen Eve Single Pro-line
+* Other Alfen NG9xx series wallboxes with Modbus TCP support
+
+== Prerequisites
+
+IMPORTANT: The charging station requires the license key for "Active load balancing" before the Modbus slave functionality can be enabled.
+
+1. Acquire the "Active Load Balancing" license from Alfen
+2. Enable "Active Load Balancing" via the Alfen Service Installer application
+3. Select the "Energy Management System" option in the Active balancing -> Data source field
+
+== Connection Settings
+
+* **Protocol**: Modbus TCP
+* **Default Port**: 502
+* **Default Modbus Unit ID**: 1 (some installations may use 200)
+
+== Modbus Register Mapping
+
+The following registers are implemented based on the Alfen Modbus Slave TCP/IP documentation:
+
+=== Measurement Registers (Read-Only)
+
+[cols="1,1,2,3"]
+|===
+|Address |Type |Unit |Description
+
+|306-311
+|Float32 x3
+|V
+|Phase voltages (L1, L2, L3)
+
+|320-325
+|Float32 x3
+|A
+|Phase currents (L1, L2, L3)
+
+|344-347
+|Float64
+|W
+|Active power
+
+|374-377
+|Float64
+|Wh
+|Total energy delivered
+|===
+
+=== Status and Control Registers
+
+[cols="1,1,2,3"]
+|===
+|Address |Type |Access |Description
+
+|1201-1205
+|String (5 regs)
+|Read
+|Charging state according to IEC 61851-1 (A, B, C, D, E, F)
+
+|1210-1211
+|Float32
+|Read/Write
+|Maximum current limit in milliampere (0-32000 mA)
+
+|1215
+|Uint16
+|Read/Write
+|Phase configuration (1 = single phase, 3 = three phase)
+|===
+
+== Charging States (IEC 61851-1)
+
+[cols="1,3"]
+|===
+|State |Description
+
+|A
+|Not connected - No vehicle plugged in
+
+|B
+|Connected, not ready - Vehicle connected but not ready for charging
+
+|C
+|Charging - Active charging session
+
+|D
+|Charging with ventilation - Charging with ventilation required
+
+|E
+|Error - Charging station error
+
+|F
+|Not available - Charging station not available
+|===
+
+== Configuration Parameters
+
+[cols="2,1,1,4"]
+|===
+|Parameter |Type |Default |Description
+
+|id
+|String
+|evseChargePoint0
+|Unique ID of this component
+
+|alias
+|String
+|
+|Human-readable name
+
+|enabled
+|Boolean
+|true
+|Enable/disable the component
+
+|readOnly
+|Boolean
+|false
+|Read-only mode (no control commands sent)
+
+|debugMode
+|Boolean
+|false
+|Enable debug logging
+
+|phaseRotation
+|PhaseRotation
+|L1_L2_L3
+|Phase rotation configuration
+
+|modbus_id
+|String
+|modbus0
+|ID of the Modbus bridge component
+
+|modbusUnitId
+|Integer
+|1
+|Modbus unit/slave ID
+|===
+
+== Usage Example
+
+.Configuration in OpenEMS
+[source,json]
+----
+{
+  "id": "evseChargePoint0",
+  "alias": "Alfen Wallbox",
+  "enabled": true,
+  "readOnly": false,
+  "debugMode": false,
+  "phaseRotation": "L1_L2_L3",
+  "modbus_id": "modbus0",
+  "modbusUnitId": 1
+}
+----
+
+== References
+
+* https://alfen.com/en/ev-charging/home/eve-single-pro-line[Alfen Eve Single Pro-line Product Page]
+* https://api.library.loxone.com/downloader/file/144/Modbus%20TCPIP%20Register%20mapping%20v2.3RN4.10.pdf[Modbus TCP/IP Register Mapping Documentation (via Loxone)]
+* https://github.com/evcc-io/evcc[evcc - Open source EV charge controller]
+* https://github.com/ThaStealth/alfen_modbus[Home Assistant Alfen Modbus Integration]
+
+== Known Limitations
+
+* Phase switching functionality is implemented but may require additional testing
+* Some registers from the official documentation are not yet implemented (e.g., temperature, session energy)
+* The component assumes a standard 6A-32A current range; actual limits depend on the specific wallbox model and installation
+
+== Future Enhancements
+
+* Add support for session energy tracking
+* Implement temperature monitoring
+* Add support for OCPP state reporting
+* Implement watchdog timeout configuration
+* Add support for multi-socket configurations (Eve Double)
