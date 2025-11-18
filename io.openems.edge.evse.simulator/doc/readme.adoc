@@ -9,6 +9,7 @@ The simulator bundle contains:
 * *ChargePointSimulatorCore* - IEC 61851-1 state machine and physics simulation
 * *EvseSimulatorModbusBridge* - Runtime OSGi component that replaces `Bridge.Modbus.Tcp`
 * *Device-specific register mappers* - Alfen, Heidelberg, ABL, and Keba
+* *Debug HTML Page* - Standalone web interface for simulator control and register visualization
 
 == EvseSimulatorModbusBridge Component
 
@@ -59,6 +60,14 @@ The `Simulator.Evse.ModbusBridge` component simulates an EVSE chargepoint over M
 | `phases`
 | `3`
 | Number of active phases (1 or 3)
+
+| `enableHardwareInput`
+| `false`
+| Run a Modbus TCP server to receive data from real hardware (for comparison)
+
+| `hardwareInputPort`
+| `5020`
+| TCP port for Modbus server to receive hardware data
 |===
 
 === Control Channels
@@ -346,6 +355,58 @@ simulator.tick(3600000); // 1 hour
 ----
 
 The chargepoint component communicates with the simulator bridge via Modbus protocol. The bridge uses the `ChargePointSimulatorCore` for state management and physics, and the device-specific `ModbusRegisterMapper` to translate state to register values.
+
+== Debug HTML Page
+
+A standalone HTML debug page is provided for visualizing and controlling the simulator. It shows:
+
+* *Simulator control panel* - Buttons for plug in/out, set current, error control
+* *Physical values* - State, power, energy, currents, voltages
+* *Modbus register values* - Hex representation of register contents
+* *Hardware input panel* - Values read from real hardware (when hardware input is enabled)
+
+=== Usage
+
+. Open `web/simulator-debug.html` in a browser
+. Configure the OpenEMS WebSocket URL (default: `ws://localhost:8085/websocket`)
+. Enter the simulator component ID (default: `modbus0`)
+. Click "Connect"
+
+The page will:
+
+* Subscribe to simulator channels
+* Display real-time values
+* Show computed Modbus register values in hex format
+* Allow control via buttons
+
+=== URL Parameters
+
+You can pre-configure the page via URL parameters:
+
+[source]
+----
+simulator-debug.html?url=ws://192.168.1.100:8085/websocket&component=modbus0&autoconnect=true
+----
+
+Parameters:
+
+* `url` - WebSocket URL
+* `component` - Component ID
+* `autoconnect` - Set to `true` to connect automatically on load
+
+=== Features
+
+* *Two-panel layout* - Hardware input (left) and simulator output (right)
+* *Register visualization* - Shows actual Modbus register values being sent
+* *Copy functionality* - Transfer hardware values to simulator for comparison
+* *State indicator* - Color-coded IEC 61851-1 state display
+
+This tool is valuable for:
+
+* Debugging chargepoint component communication
+* Validating register mappings
+* Testing new hardware compatibility
+* Demonstrating simulator behavior
 
 == See Also
 

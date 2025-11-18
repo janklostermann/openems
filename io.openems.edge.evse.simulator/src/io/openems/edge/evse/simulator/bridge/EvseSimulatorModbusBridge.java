@@ -216,7 +216,97 @@ public interface EvseSimulatorModbusBridge extends BridgeModbus, BridgeModbusTcp
 		 * Indicates the simulator is running.
 		 */
 		SIMULATOR_RUNNING(Doc.of(Level.OK)//
-				.text("Simulator is running"));
+				.text("Simulator is running")),
+
+		// Hardware input channels (read from real hardware)
+		/**
+		 * Hardware input enabled.
+		 */
+		HARDWARE_INPUT_ENABLED(Doc.of(OpenemsType.BOOLEAN)//
+				.text("Hardware input is enabled")),
+
+		/**
+		 * Hardware connected status.
+		 */
+		HARDWARE_CONNECTED(Doc.of(OpenemsType.BOOLEAN)//
+				.text("Real hardware is connected")),
+
+		/**
+		 * Hardware state (read from device).
+		 */
+		HW_STATE(Doc.of(ChargePointState.values())//
+				.text("State read from hardware")),
+
+		/**
+		 * Hardware power in W.
+		 */
+		HW_POWER(Doc.of(OpenemsType.INTEGER)//
+				.unit(Unit.WATT)//
+				.text("Power read from hardware")),
+
+		/**
+		 * Hardware energy in Wh.
+		 */
+		HW_ENERGY(Doc.of(OpenemsType.LONG)//
+				.unit(Unit.WATT_HOURS)//
+				.text("Energy read from hardware")),
+
+		/**
+		 * Hardware current L1 in mA.
+		 */
+		HW_CURRENT_L1(Doc.of(OpenemsType.INTEGER)//
+				.unit(Unit.MILLIAMPERE)//
+				.text("Current L1 from hardware")),
+
+		/**
+		 * Hardware current L2 in mA.
+		 */
+		HW_CURRENT_L2(Doc.of(OpenemsType.INTEGER)//
+				.unit(Unit.MILLIAMPERE)//
+				.text("Current L2 from hardware")),
+
+		/**
+		 * Hardware current L3 in mA.
+		 */
+		HW_CURRENT_L3(Doc.of(OpenemsType.INTEGER)//
+				.unit(Unit.MILLIAMPERE)//
+				.text("Current L3 from hardware")),
+
+		/**
+		 * Hardware voltage L1 in mV.
+		 */
+		HW_VOLTAGE_L1(Doc.of(OpenemsType.INTEGER)//
+				.unit(Unit.MILLIVOLT)//
+				.text("Voltage L1 from hardware")),
+
+		/**
+		 * Hardware voltage L2 in mV.
+		 */
+		HW_VOLTAGE_L2(Doc.of(OpenemsType.INTEGER)//
+				.unit(Unit.MILLIVOLT)//
+				.text("Voltage L2 from hardware")),
+
+		/**
+		 * Hardware voltage L3 in mV.
+		 */
+		HW_VOLTAGE_L3(Doc.of(OpenemsType.INTEGER)//
+				.unit(Unit.MILLIVOLT)//
+				.text("Voltage L3 from hardware")),
+
+		// Copy control channels
+		/**
+		 * Copy hardware values to simulator.
+		 */
+		COPY_HW_TO_SIM(Doc.of(OpenemsType.BOOLEAN)//
+				.accessMode(AccessMode.READ_WRITE)//
+				.text("Copy hardware values to simulator")),
+
+		/**
+		 * Copy simulator values to hardware output (for comparison).
+		 */
+		COPY_SIM_TO_HW(Doc.of(OpenemsType.BOOLEAN)//
+				.accessMode(AccessMode.READ_WRITE)//
+				.text("Use simulator values as reference"));
 
 		private final Doc doc;
 

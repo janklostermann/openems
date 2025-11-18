@@ -40,5 +40,11 @@ public @interface Config {
 	@AttributeDefinition(name = "Number of Phases", description = "Number of active phases (1 or 3)")
 	int phases() default 3;
 
+	@AttributeDefinition(name = "Enable Hardware Input", description = "Run a Modbus TCP server to receive data from real hardware for comparison")
+	boolean enableHardwareInput() default false;
+
+	@AttributeDefinition(name = "Hardware Input Port", description = "TCP port for Modbus server to receive hardware data")
+	int hardwareInputPort() default 5020;
+
 	String webconsole_configurationFactory_nameHint() default "Simulator EVSE Modbus Bridge [{id}]";
 }
