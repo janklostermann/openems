@@ -38,6 +38,7 @@ import io.openems.edge.bridge.modbus.api.ModbusProtocol;
 import io.openems.edge.bridge.modbus.api.element.UnsignedWordElement;
 import io.openems.edge.bridge.modbus.api.task.FC3ReadRegistersTask;
 import io.openems.edge.bridge.modbus.api.task.FC16WriteRegistersTask;
+import io.openems.edge.common.channel.BooleanWriteChannel;
 import io.openems.edge.common.component.ComponentManager;
 import io.openems.edge.common.component.OpenemsComponent;
 import io.openems.edge.common.event.EdgeEventConstants;
@@ -344,28 +345,28 @@ public class EvseChargePointAblImpl extends AbstractOpenemsModbusComponent
 
 	private void handleSimulationMode() {
 		// Process simulation control channels
-		var plugInChannel = (io.openems.edge.common.channel.BooleanWriteChannel) this
+		var plugInChannel = (BooleanWriteChannel) this
 				.channel(EvseChargePointAbl.ChannelId.SIMULATE_PLUG_IN);
 		var plugIn = plugInChannel.getNextWriteValueAndReset();
 		if (plugIn.isPresent() && plugIn.get()) {
 			this.simulator.plugIn();
 		}
 
-		var unplugChannel = (io.openems.edge.common.channel.BooleanWriteChannel) this
+		var unplugChannel = (BooleanWriteChannel) this
 				.channel(EvseChargePointAbl.ChannelId.SIMULATE_UNPLUG);
 		var unplug = unplugChannel.getNextWriteValueAndReset();
 		if (unplug.isPresent() && unplug.get()) {
 			this.simulator.unplug();
 		}
 
-		var errorChannel = (io.openems.edge.common.channel.BooleanWriteChannel) this
+		var errorChannel = (BooleanWriteChannel) this
 				.channel(EvseChargePointAbl.ChannelId.SIMULATE_ERROR);
 		var error = errorChannel.getNextWriteValueAndReset();
 		if (error.isPresent() && error.get()) {
 			this.simulator.setError();
 		}
 
-		var clearErrorChannel = (io.openems.edge.common.channel.BooleanWriteChannel) this
+		var clearErrorChannel = (BooleanWriteChannel) this
 				.channel(EvseChargePointAbl.ChannelId.SIMULATE_CLEAR_ERROR);
 		var clearError = clearErrorChannel.getNextWriteValueAndReset();
 		if (clearError.isPresent() && clearError.get()) {
