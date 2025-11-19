@@ -10,6 +10,7 @@ public class MyConfig extends AbstractComponentConfig implements Config {
 		private String id;
 		private boolean readOnly;
 		private boolean debugMode;
+		private boolean simulationMode;
 		private String modbusId;
 		private int modbusUnitId;
 		private PhaseRotation phaseRotation;
@@ -29,6 +30,11 @@ public class MyConfig extends AbstractComponentConfig implements Config {
 
 		public Builder setDebugMode(boolean debugMode) {
 			this.debugMode = debugMode;
+			return this;
+		}
+
+		public Builder setSimulationMode(boolean simulationMode) {
+			this.simulationMode = simulationMode;
 			return this;
 		}
 
@@ -76,6 +82,11 @@ public class MyConfig extends AbstractComponentConfig implements Config {
 	@Override
 	public boolean debugMode() {
 		return this.builder.debugMode;
+	}
+
+	@Override
+	public boolean simulationMode() {
+		return this.builder.simulationMode;
 	}
 
 	@Override
