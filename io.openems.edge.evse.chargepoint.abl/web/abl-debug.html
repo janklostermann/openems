@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ABL EVCC - Debug/Analyzer</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        h1 { margin: 0 0 20px 0; color: #333; }
+        .config-bar {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            flex-wrap: wrap;
+        }
+        .config-bar label { font-size: 13px; color: #666; }
+        .config-bar input {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .status {
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-size: 13px;
+            font-weight: 500;
+        }
+        .status.connected { background: #E8F5E9; color: #2E7D32; }
+        .status.disconnected { background: #FFEBEE; color: #C62828; }
+        .panel {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .panel h2 {
+            margin: 0 0 15px 0;
+            font-size: 16px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #FF6B00;
+        }
+        .register-row {
+            display: grid;
+            grid-template-columns: 100px 1fr 100px 120px 150px 80px;
+            gap: 10px;
+            align-items: center;
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+        }
+        .register-row:hover { background: #f8f8f8; }
+        .register-row .addr {
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 12px;
+            color: #666;
+        }
+        .register-row .name { font-weight: 500; }
+        .register-row .hex {
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 12px;
+            color: #1565C0;
+            background: #E3F2FD;
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+        .register-row .physical {
+            font-weight: 600;
+        }
+        .register-row input[type="number"] {
+            width: 100%;
+            padding: 6px 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: 'Monaco', 'Menlo', monospace;
+        }
+        .register-row input[type="number"]:disabled {
+            background: #f5f5f5;
+            color: #999;
+        }
+        .toggle-switch {
+            position: relative;
+            width: 50px;
+            height: 26px;
+        }
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .3s;
+            border-radius: 26px;
+        }
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 20px;
+            width: 20px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .3s;
+            border-radius: 50%;
+        }
+        input:checked + .toggle-slider {
+            background-color: #4CAF50;
+        }
+        input:checked + .toggle-slider:before {
+            transform: translateX(24px);
+        }
+        .header-row {
+            display: grid;
+            grid-template-columns: 100px 1fr 100px 120px 150px 80px;
+            gap: 10px;
+            padding: 8px 12px;
+            background: #f5f5f5;
+            font-size: 12px;
+            font-weight: 600;
+            color: #666;
+            text-transform: uppercase;
+            border-radius: 4px;
+            margin-bottom: 8px;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 15px;
+        }
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        button.primary { background: #4CAF50; color: white; }
+        button.secondary { background: #2196F3; color: white; }
+        button.danger { background: #f44336; color: white; }
+        button.warning { background: #FF9800; color: white; }
+        .state-indicator {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        .state-A { background: #e0e0e0; color: #666; }
+        .state-B { background: #FFF3E0; color: #E65100; }
+        .state-C { background: #E8F5E9; color: #2E7D32; }
+        .state-D { background: #E3F2FD; color: #1565C0; }
+        .state-E { background: #FFEBEE; color: #C62828; }
+        .state-F { background: #F3E5F5; color: #6A1B9A; }
+        .mode-indicator {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+        .mode-sim { background: #E8F5E9; color: #2E7D32; }
+        .mode-hw { background: #E3F2FD; color: #1565C0; }
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .summary-item {
+            padding: 15px;
+            background: #f8f8f8;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .summary-item .label {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+        .summary-item .value {
+            font-size: 24px;
+            font-weight: 600;
+        }
+        .summary-item .unit {
+            font-size: 12px;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <h1>ABL EVCC - Debug/Analyzer
+        <span id="modeIndicator" class="mode-indicator mode-hw">Hardware</span>
+    </h1>
+
+    <div class="config-bar">
+        <label>OpenEMS URL:</label>
+        <input type="text" id="wsUrl" value="ws://localhost:8085/websocket" style="width: 250px;">
+        <label>Component ID:</label>
+        <input type="text" id="componentId" value="evseChargePoint0" style="width: 150px;">
+        <button class="primary" onclick="connect()">Connect</button>
+        <button class="danger" onclick="disconnect()">Disconnect</button>
+        <div id="connectionStatus" class="status disconnected">Disconnected</div>
+    </div>
+
+    <!-- Summary Panel -->
+    <div class="panel">
+        <h2>Current State</h2>
+        <div class="summary-grid">
+            <div class="summary-item">
+                <div class="label">State</div>
+                <div id="summaryState" class="state-indicator state-A">A1</div>
+            </div>
+            <div class="summary-item">
+                <div class="label">Power</div>
+                <div class="value"><span id="summaryPower">0</span></div>
+                <div class="unit">W</div>
+            </div>
+            <div class="summary-item">
+                <div class="label">Energy</div>
+                <div class="value"><span id="summaryEnergy">0</span></div>
+                <div class="unit">kWh</div>
+            </div>
+            <div class="summary-item">
+                <div class="label">Current L1</div>
+                <div class="value"><span id="summaryCurrent">0</span></div>
+                <div class="unit">A</div>
+            </div>
+            <div class="summary-item">
+                <div class="label">EV Connected</div>
+                <div class="value"><span id="summaryEvConnected">No</span></div>
+                <div class="unit"></div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button class="primary" onclick="plugIn()">Plug In</button>
+            <button class="secondary" onclick="unplug()">Unplug</button>
+            <button class="danger" onclick="setError()">Set Error</button>
+            <button onclick="clearError()">Clear Error</button>
+            <span style="margin-left: 20px;">
+                <label>Set Current (mA): </label>
+                <input type="number" id="setCurrentInput" value="16000" style="width: 100px;">
+                <button class="warning" onclick="setCurrent()">Apply</button>
+            </span>
+        </div>
+    </div>
+
+    <!-- Register Details -->
+    <div class="panel">
+        <h2>Register Details (ABL EVCC2/3)</h2>
+        <div class="header-row">
+            <div>Address</div>
+            <div>Name</div>
+            <div>Raw (Hex)</div>
+            <div>Physical</div>
+            <div>Manual Value</div>
+            <div>Use HW</div>
+        </div>
+
+        <!-- Charging State -->
+        <div class="register-row">
+            <div class="addr">0x0034</div>
+            <div class="name">Charging State</div>
+            <div class="hex" id="rawState">0x00</div>
+            <div class="physical"><span id="physState">A1</span></div>
+            <select id="manualState" style="padding: 6px; border-radius: 4px; border: 1px solid #ddd;" disabled>
+                <option value="A1">A1 - Not Ready</option>
+                <option value="A2">A2 - Ready, No EV</option>
+                <option value="B1">B1 - EV Connected, Not Ready</option>
+                <option value="B2">B2 - EV Connected, Ready</option>
+                <option value="C1">C1 - Charge Requested</option>
+                <option value="C2">C2 - Charging</option>
+                <option value="D1">D1 - Ventilation Requested</option>
+                <option value="D2">D2 - Charging with Ventilation</option>
+                <option value="E0">E0 - Error</option>
+                <option value="F0">F0 - Not Available</option>
+            </select>
+            <label class="toggle-switch">
+                <input type="checkbox" id="useHwState" checked onchange="toggleOverride('State')">
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+
+        <!-- EV Connected -->
+        <div class="register-row">
+            <div class="addr">0x0033</div>
+            <div class="name">EV Connected</div>
+            <div class="hex" id="rawEvConnected">0x00</div>
+            <div class="physical"><span id="physEvConnected">No</span></div>
+            <select id="manualEvConnected" style="padding: 6px; border-radius: 4px; border: 1px solid #ddd;" disabled>
+                <option value="0">No</option>
+                <option value="1">Yes</option>
+            </select>
+            <label class="toggle-switch">
+                <input type="checkbox" id="useHwEvConnected" checked disabled>
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+
+        <!-- Current L1 -->
+        <div class="register-row">
+            <div class="addr">0x0034</div>
+            <div class="name">Current L1</div>
+            <div class="hex" id="rawCurrentL1">0x00</div>
+            <div class="physical"><span id="physCurrentL1">0</span> A</div>
+            <input type="number" id="manualCurrentL1" value="0" step="1" disabled>
+            <label class="toggle-switch">
+                <input type="checkbox" id="useHwCurrentL1" checked onchange="toggleOverride('CurrentL1')">
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+
+        <!-- Current L2 -->
+        <div class="register-row">
+            <div class="addr">0x0035</div>
+            <div class="name">Current L2</div>
+            <div class="hex" id="rawCurrentL2">0x00</div>
+            <div class="physical"><span id="physCurrentL2">0</span> A</div>
+            <input type="number" id="manualCurrentL2" value="0" step="1" disabled>
+            <label class="toggle-switch">
+                <input type="checkbox" id="useHwCurrentL2" checked onchange="toggleOverride('CurrentL2')">
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+
+        <!-- Current L3 -->
+        <div class="register-row">
+            <div class="addr">0x0035</div>
+            <div class="name">Current L3</div>
+            <div class="hex" id="rawCurrentL3">0x00</div>
+            <div class="physical"><span id="physCurrentL3">0</span> A</div>
+            <input type="number" id="manualCurrentL3" value="0" step="1" disabled>
+            <label class="toggle-switch">
+                <input type="checkbox" id="useHwCurrentL3" checked onchange="toggleOverride('CurrentL3')">
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+
+        <!-- Power (calculated) -->
+        <div class="register-row">
+            <div class="addr">-</div>
+            <div class="name">Active Power</div>
+            <div class="hex">-</div>
+            <div class="physical"><span id="physPower">0</span> W</div>
+            <input type="number" id="manualPower" value="0" step="100" disabled>
+            <label class="toggle-switch">
+                <input type="checkbox" id="useHwPower" checked disabled>
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+
+        <!-- Energy (calculated) -->
+        <div class="register-row">
+            <div class="addr">-</div>
+            <div class="name">Total Energy</div>
+            <div class="hex">-</div>
+            <div class="physical"><span id="physEnergy">0</span> Wh</div>
+            <input type="number" id="manualEnergy" value="0" step="100" disabled>
+            <label class="toggle-switch">
+                <input type="checkbox" id="useHwEnergy" checked disabled>
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let componentId = 'evseChargePoint0';
+        let messageId = 0;
+
+        function connect() {
+            const url = document.getElementById('wsUrl').value;
+            componentId = document.getElementById('componentId').value;
+
+            if (ws) ws.close();
+
+            ws = new WebSocket(url);
+            ws.onopen = () => {
+                updateConnectionStatus(true);
+                authenticate();
+            };
+            ws.onmessage = (event) => handleMessage(JSON.parse(event.data));
+            ws.onclose = () => updateConnectionStatus(false);
+            ws.onerror = () => updateConnectionStatus(false);
+        }
+
+        function disconnect() {
+            if (ws) { ws.close(); ws = null; }
+        }
+
+        function updateConnectionStatus(connected) {
+            const status = document.getElementById('connectionStatus');
+            status.textContent = connected ? 'Connected' : 'Disconnected';
+            status.className = 'status ' + (connected ? 'connected' : 'disconnected');
+        }
+
+        function authenticate() {
+            send({
+                jsonrpc: '2.0',
+                id: messageId++,
+                method: 'authenticateWithPassword',
+                params: { password: 'guest' }
+            });
+        }
+
+        function subscribeChannels() {
+            const channels = [
+                // Standard channels
+                'ChargingState', 'EvConnected',
+                'ActivePower',
+                'CurrentL1', 'CurrentL2', 'CurrentL3',
+                'ActiveConsumptionEnergy',
+                'PhaseCurrentL1', 'PhaseCurrentL2', 'PhaseCurrentL3',
+                // Debug channels
+                'SimulationMode', 'DebugMode',
+                'RawState', 'RawEvConnected',
+                'RawCurrentL1', 'RawCurrentL2', 'RawCurrentL3'
+            ].map(ch => componentId + '/' + ch);
+
+            send({
+                jsonrpc: '2.0',
+                id: messageId++,
+                method: 'subscribeChannels',
+                params: { count: 0, channels: channels }
+            });
+        }
+
+        function handleMessage(msg) {
+            if (msg.result && msg.result.token) {
+                subscribeChannels();
+            } else if (msg.method === 'currentData') {
+                updateData(msg.params);
+            }
+        }
+
+        function updateData(params) {
+            if (!params || !params[componentId]) return;
+            const d = params[componentId];
+
+            // Update mode indicator
+            const isSimMode = d.SimulationMode === true;
+            const indicator = document.getElementById('modeIndicator');
+            indicator.textContent = isSimMode ? 'Simulation' : 'Hardware';
+            indicator.className = 'mode-indicator ' + (isSimMode ? 'mode-sim' : 'mode-hw');
+
+            // Update summary - ABL states include substates like A1, B1, C2
+            const state = d.ChargingState || 'A1';
+            const stateElem = document.getElementById('summaryState');
+            stateElem.textContent = state;
+            // Extract first character for color class
+            stateElem.className = 'state-indicator state-' + state.charAt(0);
+
+            document.getElementById('summaryPower').textContent = d.ActivePower || 0;
+            document.getElementById('summaryEnergy').textContent = ((d.ActiveConsumptionEnergy || 0) / 1000).toFixed(1);
+
+            // ABL provides current in A directly
+            const currentL1 = d.PhaseCurrentL1 || d.CurrentL1 / 1000 || 0;
+            document.getElementById('summaryCurrent').textContent = currentL1.toFixed(1);
+
+            // EV Connected
+            const evConnected = d.EvConnected === true;
+            document.getElementById('summaryEvConnected').textContent = evConnected ? 'Yes' : 'No';
+
+            // Update physical values
+            document.getElementById('physState').textContent = state;
+            document.getElementById('physEvConnected').textContent = evConnected ? 'Yes' : 'No';
+
+            // ABL currents are in A
+            document.getElementById('physCurrentL1').textContent = (d.PhaseCurrentL1 || 0);
+            document.getElementById('physCurrentL2').textContent = (d.PhaseCurrentL2 || 0);
+            document.getElementById('physCurrentL3').textContent = (d.PhaseCurrentL3 || 0);
+            document.getElementById('physPower').textContent = d.ActivePower || 0;
+            document.getElementById('physEnergy').textContent = d.ActiveConsumptionEnergy || 0;
+
+            // Update raw register displays
+            if (d.RawState) document.getElementById('rawState').textContent = d.RawState;
+            if (d.RawEvConnected) document.getElementById('rawEvConnected').textContent = d.RawEvConnected;
+            if (d.RawCurrentL1) document.getElementById('rawCurrentL1').textContent = d.RawCurrentL1;
+            if (d.RawCurrentL2) document.getElementById('rawCurrentL2').textContent = d.RawCurrentL2;
+            if (d.RawCurrentL3) document.getElementById('rawCurrentL3').textContent = d.RawCurrentL3;
+        }
+
+        function send(msg) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify(msg));
+            }
+        }
+
+        function setChannel(channel, value) {
+            send({
+                jsonrpc: '2.0',
+                id: messageId++,
+                method: 'setChannelValue',
+                params: {
+                    componentId: componentId,
+                    channelId: channel,
+                    value: value
+                }
+            });
+        }
+
+        function plugIn() { setChannel('SimulatePlugIn', true); }
+        function unplug() { setChannel('SimulateUnplug', true); }
+        function setError() { setChannel('SimulateError', true); }
+        function clearError() { setChannel('SimulateClearError', true); }
+
+        function setCurrent() {
+            const value = parseInt(document.getElementById('setCurrentInput').value);
+            setChannel('SetChargingCurrent', value);
+        }
+
+        function toggleOverride(name) {
+            const useHw = document.getElementById('useHw' + name).checked;
+            const manualInput = document.getElementById('manual' + name);
+            if (manualInput) {
+                manualInput.disabled = useHw;
+            }
+
+            // Map individual register names to override categories
+            const overrideMap = {
+                'CurrentL1': 'Current', 'CurrentL2': 'Current', 'CurrentL3': 'Current',
+                'State': 'State'
+            };
+            const overrideCategory = overrideMap[name];
+            if (overrideCategory) {
+                setChannel('Override' + overrideCategory, !useHw);
+            }
+
+            // If switching to manual mode, send the manual value
+            if (!useHw && manualInput) {
+                const value = manualInput.tagName === 'SELECT'
+                    ? manualInput.value
+                    : parseFloat(manualInput.value);
+
+                // ABL currents are in mA for component channels
+                let channelValue = value;
+                if (name.startsWith('Current')) {
+                    channelValue = Math.round(value * 1000); // A to mA
+                }
+
+                setChannel('Manual' + name, channelValue);
+            }
+        }
+
+        // Also send manual values when they change
+        function onManualValueChange(name) {
+            const useHw = document.getElementById('useHw' + name).checked;
+            if (!useHw) {
+                const manualInput = document.getElementById('manual' + name);
+                const value = manualInput.tagName === 'SELECT'
+                    ? manualInput.value
+                    : parseFloat(manualInput.value);
+
+                let channelValue = value;
+                if (name.startsWith('Current')) {
+                    channelValue = Math.round(value * 1000);
+                }
+
+                setChannel('Manual' + name, channelValue);
+            }
+        }
+
+        // Auto-connect with URL params
+        window.onload = () => {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('url')) document.getElementById('wsUrl').value = params.get('url');
+            if (params.get('component')) document.getElementById('componentId').value = params.get('component');
+            if (params.get('autoconnect') === 'true') connect();
+        };
+    </script>
+</body>
+</html>

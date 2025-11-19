@@ -1,10 +1,15 @@
 package io.openems.edge.evse.chargepoint.abl;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+
 import org.junit.Test;
 
 import io.openems.edge.bridge.modbus.test.DummyModbusBridge;
 import io.openems.edge.common.test.AbstractComponentTest;
 import io.openems.edge.common.test.ComponentTest;
+import io.openems.edge.evse.chargepoint.abl.enums.ChargingState;
 import io.openems.common.test.DummyConfigurationAdmin;
 
 /**
@@ -183,6 +188,188 @@ public class EvseChargePointAblImplTest {
 						.build()) //
 				.next(new AbstractComponentTest.TestCase()) //
 				.deactivate();
+	}
+
+	/**
+	 * Test 6: Test simulation mode activation.
+	 *
+	 * <p>
+	 * Verifies component activates correctly in simulation mode without requiring a
+	 * real Modbus connection. The simulator core should be initialized and the
+	 * SIMULATION_MODE channel should be set to true.
+	 *
+	 * @throws Exception if component fails to activate
+	 */
+	@Test
+	public void testSimulationModeActivation() throws Exception {
+		var component = new EvseChargePointAblImpl();
+		new ComponentTest(component) //
+				.addReference("cm", new DummyConfigurationAdmin()) //
+				.addReference("setModbus", new DummyModbusBridge("modbus0")) //
+				.activate(MyConfig.create() //
+						.setId("evcs0") //
+						.setModbusId("modbus0") //
+						.setSimulationMode(true) // Enable simulation mode
+						.build()) //
+				.next(new AbstractComponentTest.TestCase() //
+						.output(EvseChargePointAbl.ChannelId.SIMULATION_MODE, true)) //
+				.deactivate();
+	}
+
+	/**
+	 * Test 7: Test simulation mode with initial state.
+	 *
+	 * <p>
+	 * Verifies the simulator starts in the correct initial state (A1 - not
+	 * connected) and that all electrical channels are properly initialized.
+	 *
+	 * @throws Exception if component fails
+	 */
+	@Test
+	public void testSimulationModeInitialState() throws Exception {
+		var component = new EvseChargePointAblImpl();
+		new ComponentTest(component) //
+				.addReference("cm", new DummyConfigurationAdmin()) //
+				.addReference("setModbus", new DummyModbusBridge("modbus0")) //
+				.activate(MyConfig.create() //
+						.setId("evcs0") //
+						.setModbusId("modbus0") //
+						.setSimulationMode(true) //
+						.build()) //
+				.next(new AbstractComponentTest.TestCase() //
+						.output(EvseChargePointAbl.ChannelId.SIMULATION_MODE, true) //
+						.output(EvseChargePointAbl.ChannelId.CHARGING_STATE, ChargingState.A1) //
+						.output(EvseChargePointAbl.ChannelId.EV_CONNECTED, false)) //
+				.deactivate();
+	}
+
+	/**
+	 * Test 8: Test simulation mode plug-in/unplug cycle.
+	 *
+	 * <p>
+	 * Verifies the simulator correctly handles vehicle plug-in and unplug events,
+	 * transitioning through states A1 -> B1 -> A1.
+	 *
+	 * @throws Exception if component fails
+	 */
+	@Test
+	public void testSimulationModePlugCycle() throws Exception {
+		var component = new EvseChargePointAblImpl();
+		new ComponentTest(component) //
+				.addReference("cm", new DummyConfigurationAdmin()) //
+				.addReference("setModbus", new DummyModbusBridge("modbus0")) //
+				.activate(MyConfig.create() //
+						.setId("evcs0") //
+						.setModbusId("modbus0") //
+						.setSimulationMode(true) //
+						.build()) //
+				// Initial state - unplugged
+				.next(new AbstractComponentTest.TestCase() //
+						.output(EvseChargePointAbl.ChannelId.CHARGING_STATE, ChargingState.A1)) //
+				// Plug in vehicle
+				.next(new AbstractComponentTest.TestCase() //
+						.input(EvseChargePointAbl.ChannelId.SIMULATE_PLUG_IN, true)) //
+				// Verify connected state
+				.next(new AbstractComponentTest.TestCase() //
+						.output(EvseChargePointAbl.ChannelId.CHARGING_STATE, ChargingState.B1) //
+						.output(EvseChargePointAbl.ChannelId.EV_CONNECTED, true)) //
+				// Unplug vehicle
+				.next(new AbstractComponentTest.TestCase() //
+						.input(EvseChargePointAbl.ChannelId.SIMULATE_UNPLUG, true)) //
+				// Back to unplugged
+				.next(new AbstractComponentTest.TestCase() //
+						.output(EvseChargePointAbl.ChannelId.CHARGING_STATE, ChargingState.A1) //
+						.output(EvseChargePointAbl.ChannelId.EV_CONNECTED, false)) //
+				.deactivate();
+	}
+
+	/**
+	 * Test 9: Test simulation mode error handling.
+	 *
+	 * <p>
+	 * Verifies the simulator correctly handles error state transitions.
+	 *
+	 * @throws Exception if component fails
+	 */
+	@Test
+	public void testSimulationModeErrorHandling() throws Exception {
+		var component = new EvseChargePointAblImpl();
+		new ComponentTest(component) //
+				.addReference("cm", new DummyConfigurationAdmin()) //
+				.addReference("setModbus", new DummyModbusBridge("modbus0")) //
+				.activate(MyConfig.create() //
+						.setId("evcs0") //
+						.setModbusId("modbus0") //
+						.setSimulationMode(true) //
+						.build()) //
+				// Initial state
+				.next(new AbstractComponentTest.TestCase()) //
+				// Set error
+				.next(new AbstractComponentTest.TestCase() //
+						.input(EvseChargePointAbl.ChannelId.SIMULATE_ERROR, true)) //
+				// Verify error state
+				.next(new AbstractComponentTest.TestCase() //
+						.output(EvseChargePointAbl.ChannelId.CHARGING_STATE, ChargingState.E0)) //
+				// Clear error
+				.next(new AbstractComponentTest.TestCase() //
+						.input(EvseChargePointAbl.ChannelId.SIMULATE_CLEAR_ERROR, true)) //
+				// Back to normal
+				.next(new AbstractComponentTest.TestCase() //
+						.output(EvseChargePointAbl.ChannelId.CHARGING_STATE, ChargingState.A1)) //
+				.deactivate();
+	}
+
+	/**
+	 * Test 10: Test simulation mode with debug mode combined.
+	 *
+	 * <p>
+	 * Verifies that simulation mode and debug mode can be used together.
+	 *
+	 * @throws Exception if component fails
+	 */
+	@Test
+	public void testSimulationAndDebugModeCombined() throws Exception {
+		var component = new EvseChargePointAblImpl();
+		new ComponentTest(component) //
+				.addReference("cm", new DummyConfigurationAdmin()) //
+				.addReference("setModbus", new DummyModbusBridge("modbus0")) //
+				.activate(MyConfig.create() //
+						.setId("evcs0") //
+						.setModbusId("modbus0") //
+						.setSimulationMode(true) //
+						.setDebugMode(true) //
+						.build()) //
+				.next(new AbstractComponentTest.TestCase() //
+						.output(EvseChargePointAbl.ChannelId.SIMULATION_MODE, true) //
+						.output(EvseChargePointAbl.ChannelId.DEBUG_MODE, true)) //
+				.deactivate();
+	}
+
+	/**
+	 * Test 11: Test evaluateIsReadyForCharging method.
+	 *
+	 * <p>
+	 * Unit test for the static helper method that determines if the charging
+	 * station is ready based on state.
+	 */
+	@Test
+	public void testEvaluateIsReadyForCharging() {
+		// States that should be ready
+		assertTrue(EvseChargePointAblImpl.evaluateIsReadyForCharging(ChargingState.B2));
+		assertTrue(EvseChargePointAblImpl.evaluateIsReadyForCharging(ChargingState.C1));
+		assertTrue(EvseChargePointAblImpl.evaluateIsReadyForCharging(ChargingState.C2));
+		assertTrue(EvseChargePointAblImpl.evaluateIsReadyForCharging(ChargingState.D1));
+		assertTrue(EvseChargePointAblImpl.evaluateIsReadyForCharging(ChargingState.D2));
+
+		// States that should not be ready
+		assertEquals(false, EvseChargePointAblImpl.evaluateIsReadyForCharging(ChargingState.A1));
+		assertEquals(false, EvseChargePointAblImpl.evaluateIsReadyForCharging(ChargingState.A2));
+		assertEquals(false, EvseChargePointAblImpl.evaluateIsReadyForCharging(ChargingState.B1));
+		assertEquals(false, EvseChargePointAblImpl.evaluateIsReadyForCharging(ChargingState.E0));
+		assertEquals(false, EvseChargePointAblImpl.evaluateIsReadyForCharging(ChargingState.F0));
+
+		// Null handling
+		assertEquals(false, EvseChargePointAblImpl.evaluateIsReadyForCharging(null));
 	}
 
 	/*

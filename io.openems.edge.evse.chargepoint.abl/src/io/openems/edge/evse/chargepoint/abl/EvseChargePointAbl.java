@@ -1,8 +1,12 @@
 package io.openems.edge.evse.chargepoint.abl;
 
+import static io.openems.common.channel.AccessMode.READ_WRITE;
 import static io.openems.common.channel.AccessMode.WRITE_ONLY;
 import static io.openems.common.channel.Unit.MILLIAMPERE;
+import static io.openems.common.channel.Unit.VOLT;
+import static io.openems.common.types.OpenemsType.BOOLEAN;
 import static io.openems.common.types.OpenemsType.INTEGER;
+import static io.openems.common.types.OpenemsType.STRING;
 
 import io.openems.common.exceptions.OpenemsError.OpenemsNamedException;
 import io.openems.common.types.OpenemsType;
@@ -120,6 +124,30 @@ public interface EvseChargePointAbl extends OpenemsComponent {
 		 * </ul>
 		 */
 		FIRMWARE_VERSION(Doc.of(OpenemsType.STRING)),
+
+		// Simulation mode channels
+		SIMULATION_MODE(Doc.of(BOOLEAN).text("Simulation mode is active")),
+		SIMULATE_PLUG_IN(Doc.of(BOOLEAN).accessMode(READ_WRITE).text("Simulate plugging in a vehicle")),
+		SIMULATE_UNPLUG(Doc.of(BOOLEAN).accessMode(READ_WRITE).text("Simulate unplugging a vehicle")),
+		SIMULATE_ERROR(Doc.of(BOOLEAN).accessMode(READ_WRITE).text("Simulate an error condition")),
+		SIMULATE_CLEAR_ERROR(Doc.of(BOOLEAN).accessMode(READ_WRITE).text("Clear simulated error")),
+
+		// Debug mode channels
+		DEBUG_MODE(Doc.of(BOOLEAN).text("Debug mode is active")),
+		RAW_STATE(Doc.of(STRING).text("Raw state register (hex)")),
+		RAW_CURRENT_L1(Doc.of(STRING).text("Raw current L1 register (hex)")),
+		RAW_CURRENT_L2(Doc.of(STRING).text("Raw current L2 register (hex)")),
+		RAW_CURRENT_L3(Doc.of(STRING).text("Raw current L3 register (hex)")),
+		RAW_EV_CONNECTED(Doc.of(STRING).text("Raw EV connected register (hex)")),
+
+		// Override channels for debug mode
+		OVERRIDE_CURRENT(Doc.of(BOOLEAN).accessMode(READ_WRITE).text("Override current with manual value")),
+		OVERRIDE_STATE(Doc.of(BOOLEAN).accessMode(READ_WRITE).text("Override state with manual value")),
+
+		// Manual value inputs
+		MANUAL_CURRENT_L1(Doc.of(INTEGER).unit(MILLIAMPERE).accessMode(READ_WRITE).text("Manual current L1")),
+		MANUAL_CURRENT_L2(Doc.of(INTEGER).unit(MILLIAMPERE).accessMode(READ_WRITE).text("Manual current L2")),
+		MANUAL_CURRENT_L3(Doc.of(INTEGER).unit(MILLIAMPERE).accessMode(READ_WRITE).text("Manual current L3")),
 
 		;
 

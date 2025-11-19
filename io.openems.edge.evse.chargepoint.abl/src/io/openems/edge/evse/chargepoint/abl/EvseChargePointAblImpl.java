@@ -50,6 +50,8 @@ import io.openems.edge.evse.api.chargepoint.Profile.ChargePointActions;
 import io.openems.edge.evse.api.common.ApplySetPoint;
 import io.openems.edge.evse.chargepoint.abl.enums.ChargingState;
 import io.openems.edge.evse.chargepoint.abl.enums.Status;
+import io.openems.edge.evse.simulator.core.ChargePointSimulatorCore;
+import io.openems.edge.evse.simulator.core.ChargePointState;
 import io.openems.edge.meter.api.ElectricityMeter;
 import io.openems.edge.meter.api.PhaseRotation;
 import io.openems.edge.timedata.api.Timedata;
@@ -80,6 +82,8 @@ public class EvseChargePointAblImpl extends AbstractOpenemsModbusComponent
 
 	private Config config;
 	private Tuple<Instant, Integer> previousCurrent = null;
+	private ChargePointSimulatorCore simulator;
+	private long lastTickTime;
 
 	@Reference
 	private ConfigurationAdmin cm;
@@ -110,9 +114,25 @@ public class EvseChargePointAblImpl extends AbstractOpenemsModbusComponent
 
 	@Activate
 	private void activate(ComponentContext context, Config config) throws OpenemsException {
-		super.activate(context, config.id(), config.alias(), config.enabled(), config.modbusUnitId(), this.cm,
-				"Modbus", config.modbus_id());
+		if (config.simulationMode()) {
+			// In simulation mode, we don't need a real Modbus connection
+			super.activate(context, config.id(), config.alias(), config.enabled(), config.modbusUnitId(), this.cm,
+					"Modbus", "");
+			this.initializeSimulator();
+		} else {
+			super.activate(context, config.id(), config.alias(), config.enabled(), config.modbusUnitId(), this.cm,
+					"Modbus", config.modbus_id());
+		}
 		this.applyConfig(config);
+	}
+
+	private void initializeSimulator() {
+		this.simulator = new ChargePointSimulatorCore();
+		this.simulator.setVoltages(230.0, 230.0, 230.0);
+		this.simulator.setPhases(this.config != null && this.config.wiring() == SingleOrThreePhase.SINGLE_PHASE ? 1 : 3);
+		this.lastTickTime = System.currentTimeMillis();
+		setValue(this, EvseChargePointAbl.ChannelId.SIMULATION_MODE, true);
+		this.logInfo(this.log, "Simulation mode activated");
 	}
 
 	@Modified
@@ -126,6 +146,7 @@ public class EvseChargePointAblImpl extends AbstractOpenemsModbusComponent
 
 	private void applyConfig(Config config) {
 		this.config = config;
+		setValue(this, EvseChargePointAbl.ChannelId.DEBUG_MODE, config.debugMode());
 	}
 
 	@Override
@@ -308,33 +329,143 @@ public class EvseChargePointAblImpl extends AbstractOpenemsModbusComponent
 
 		switch (event.getTopic()) {
 		case EdgeEventConstants.TOPIC_CYCLE_BEFORE_PROCESS_IMAGE -> {
-			// Calculate energy from power
-			this.calculateEnergyL1.update(this.getActivePowerL1Channel().getNextValue().get());
-			this.calculateEnergyL2.update(this.getActivePowerL2Channel().getNextValue().get());
-			this.calculateEnergyL3.update(this.getActivePowerL3Channel().getNextValue().get());
+			if (this.config.simulationMode() && this.simulator != null) {
+				this.handleSimulationMode();
+			} else {
+				this.handleNormalMode();
+			}
 
-			// Update IS_READY_FOR_CHARGING based on charging state
-			var chargingState = this.getChargingState();
-			var isReady = evaluateIsReadyForCharging(chargingState);
-			setValue(this, EvseChargePoint.ChannelId.IS_READY_FOR_CHARGING, isReady);
-
-			// Map phase currents from ABL channels to ElectricityMeter channels
-			// Convert A to mA (*1000) for meter channels
-			Integer currentL1 = (Integer) this.channel(EvseChargePointAbl.ChannelId.PHASE_CURRENT_L1).value().get();
-			Integer currentL2 = (Integer) this.channel(EvseChargePointAbl.ChannelId.PHASE_CURRENT_L2).value().get();
-			Integer currentL3 = (Integer) this.channel(EvseChargePointAbl.ChannelId.PHASE_CURRENT_L3).value().get();
-
-			setValue(this, ElectricityMeter.ChannelId.CURRENT_L1, currentL1 != null ? currentL1 * 1000 : null);
-			setValue(this, ElectricityMeter.ChannelId.CURRENT_L2, currentL2 != null ? currentL2 * 1000 : null);
-			setValue(this, ElectricityMeter.ChannelId.CURRENT_L3, currentL3 != null ? currentL3 * 1000 : null);
-
-			// Set voltage to nominal 230V per phase (ABL doesn't provide voltage
-			// measurement)
-			setValue(this, ElectricityMeter.ChannelId.VOLTAGE_L1, 230000); // 230V in mV
-			setValue(this, ElectricityMeter.ChannelId.VOLTAGE_L2, 230000);
-			setValue(this, ElectricityMeter.ChannelId.VOLTAGE_L3, 230000);
+			if (this.config.debugMode()) {
+				this.updateRawRegisterChannels();
+			}
 		}
 		}
+	}
+
+	private void handleSimulationMode() {
+		// Process simulation control channels
+		var plugIn = this.<Boolean>channel(EvseChargePointAbl.ChannelId.SIMULATE_PLUG_IN).getNextWriteValue();
+		if (plugIn.isPresent() && plugIn.get()) {
+			this.simulator.plugIn();
+			this.<io.openems.edge.common.channel.BooleanWriteChannel>channel(
+					EvseChargePointAbl.ChannelId.SIMULATE_PLUG_IN).setNextValue(false);
+		}
+
+		var unplug = this.<Boolean>channel(EvseChargePointAbl.ChannelId.SIMULATE_UNPLUG).getNextWriteValue();
+		if (unplug.isPresent() && unplug.get()) {
+			this.simulator.unplug();
+			this.<io.openems.edge.common.channel.BooleanWriteChannel>channel(
+					EvseChargePointAbl.ChannelId.SIMULATE_UNPLUG).setNextValue(false);
+		}
+
+		var error = this.<Boolean>channel(EvseChargePointAbl.ChannelId.SIMULATE_ERROR).getNextWriteValue();
+		if (error.isPresent() && error.get()) {
+			this.simulator.setError();
+			this.<io.openems.edge.common.channel.BooleanWriteChannel>channel(
+					EvseChargePointAbl.ChannelId.SIMULATE_ERROR).setNextValue(false);
+		}
+
+		var clearError = this.<Boolean>channel(EvseChargePointAbl.ChannelId.SIMULATE_CLEAR_ERROR).getNextWriteValue();
+		if (clearError.isPresent() && clearError.get()) {
+			this.simulator.clearError();
+			this.<io.openems.edge.common.channel.BooleanWriteChannel>channel(
+					EvseChargePointAbl.ChannelId.SIMULATE_CLEAR_ERROR).setNextValue(false);
+		}
+
+		// Tick the simulator
+		var now = System.currentTimeMillis();
+		this.simulator.tick(now - this.lastTickTime);
+		this.lastTickTime = now;
+
+		// Update channels from simulator
+		var state = this.simulator.getState();
+		var chargingState = convertSimulatorState(state);
+		setValue(this, EvseChargePointAbl.ChannelId.CHARGING_STATE, chargingState);
+		setValue(this, EvseChargePointAbl.ChannelId.EV_CONNECTED,
+				state == ChargePointState.B || state == ChargePointState.C || state == ChargePointState.D);
+		setValue(this, EvseChargePoint.ChannelId.IS_READY_FOR_CHARGING, evaluateIsReadyForCharging(chargingState));
+
+		// Update electrical values
+		int currentA = (int) this.simulator.getCurrentAmps();
+		int phases = this.simulator.getPhases();
+
+		// Set ABL phase currents (in A)
+		setValue(this, EvseChargePointAbl.ChannelId.PHASE_CURRENT_L1, currentA);
+		setValue(this, EvseChargePointAbl.ChannelId.PHASE_CURRENT_L2, phases == 3 ? currentA : 0);
+		setValue(this, EvseChargePointAbl.ChannelId.PHASE_CURRENT_L3, phases == 3 ? currentA : 0);
+
+		// Set ElectricityMeter channels (in mV and mA)
+		setValue(this, ElectricityMeter.ChannelId.VOLTAGE_L1, 230000);
+		setValue(this, ElectricityMeter.ChannelId.VOLTAGE_L2, 230000);
+		setValue(this, ElectricityMeter.ChannelId.VOLTAGE_L3, 230000);
+		setValue(this, ElectricityMeter.ChannelId.CURRENT_L1, currentA * 1000);
+		setValue(this, ElectricityMeter.ChannelId.CURRENT_L2, phases == 3 ? currentA * 1000 : 0);
+		setValue(this, ElectricityMeter.ChannelId.CURRENT_L3, phases == 3 ? currentA * 1000 : 0);
+		setValue(this, ElectricityMeter.ChannelId.ACTIVE_POWER, (int) this.simulator.getPowerWatts());
+
+		// Update energy calculations
+		this.calculateEnergyL1.update((int) this.simulator.getPowerL1Watts());
+		this.calculateEnergyL2.update((int) this.simulator.getPowerL2Watts());
+		this.calculateEnergyL3.update((int) this.simulator.getPowerL3Watts());
+	}
+
+	private void handleNormalMode() {
+		// Calculate energy from power
+		this.calculateEnergyL1.update(this.getActivePowerL1Channel().getNextValue().get());
+		this.calculateEnergyL2.update(this.getActivePowerL2Channel().getNextValue().get());
+		this.calculateEnergyL3.update(this.getActivePowerL3Channel().getNextValue().get());
+
+		// Update IS_READY_FOR_CHARGING based on charging state
+		var chargingState = this.getChargingState();
+		var isReady = evaluateIsReadyForCharging(chargingState);
+		setValue(this, EvseChargePoint.ChannelId.IS_READY_FOR_CHARGING, isReady);
+
+		// Map phase currents from ABL channels to ElectricityMeter channels
+		// Convert A to mA (*1000) for meter channels
+		Integer currentL1 = (Integer) this.channel(EvseChargePointAbl.ChannelId.PHASE_CURRENT_L1).value().get();
+		Integer currentL2 = (Integer) this.channel(EvseChargePointAbl.ChannelId.PHASE_CURRENT_L2).value().get();
+		Integer currentL3 = (Integer) this.channel(EvseChargePointAbl.ChannelId.PHASE_CURRENT_L3).value().get();
+
+		setValue(this, ElectricityMeter.ChannelId.CURRENT_L1, currentL1 != null ? currentL1 * 1000 : null);
+		setValue(this, ElectricityMeter.ChannelId.CURRENT_L2, currentL2 != null ? currentL2 * 1000 : null);
+		setValue(this, ElectricityMeter.ChannelId.CURRENT_L3, currentL3 != null ? currentL3 * 1000 : null);
+
+		// Set voltage to nominal 230V per phase (ABL doesn't provide voltage measurement)
+		setValue(this, ElectricityMeter.ChannelId.VOLTAGE_L1, 230000);
+		setValue(this, ElectricityMeter.ChannelId.VOLTAGE_L2, 230000);
+		setValue(this, ElectricityMeter.ChannelId.VOLTAGE_L3, 230000);
+	}
+
+	private void updateRawRegisterChannels() {
+		// Get current values and format as hex
+		var currentL1 = this.channel(EvseChargePointAbl.ChannelId.PHASE_CURRENT_L1).value().get();
+		var currentL2 = this.channel(EvseChargePointAbl.ChannelId.PHASE_CURRENT_L2).value().get();
+		var currentL3 = this.channel(EvseChargePointAbl.ChannelId.PHASE_CURRENT_L3).value().get();
+		var state = this.getChargingState();
+		var evConnected = this.channel(EvseChargePointAbl.ChannelId.EV_CONNECTED).value().get();
+
+		// Format values as hex strings
+		setValue(this, EvseChargePointAbl.ChannelId.RAW_CURRENT_L1,
+				currentL1 != null ? String.format("%02X", ((Integer) currentL1) & 0xFF) : "N/A");
+		setValue(this, EvseChargePointAbl.ChannelId.RAW_CURRENT_L2,
+				currentL2 != null ? String.format("%02X", ((Integer) currentL2) & 0xFF) : "N/A");
+		setValue(this, EvseChargePointAbl.ChannelId.RAW_CURRENT_L3,
+				currentL3 != null ? String.format("%02X", ((Integer) currentL3) & 0xFF) : "N/A");
+		setValue(this, EvseChargePointAbl.ChannelId.RAW_STATE,
+				state != null ? String.format("%02X", state.value) : "N/A");
+		setValue(this, EvseChargePointAbl.ChannelId.RAW_EV_CONNECTED,
+				evConnected != null ? (Boolean.TRUE.equals(evConnected) ? "01" : "00") : "N/A");
+	}
+
+	private static ChargingState convertSimulatorState(ChargePointState state) {
+		return switch (state) {
+		case A -> ChargingState.A1;
+		case B -> ChargingState.B1;
+		case C -> ChargingState.C2;
+		case D -> ChargingState.D2;
+		case E -> ChargingState.E0;
+		case F -> ChargingState.F0;
+		};
 	}
 
 	/**
@@ -382,11 +513,16 @@ public class EvseChargePointAblImpl extends AbstractOpenemsModbusComponent
 
 		this.previousCurrent = Tuple.of(now, current);
 
-		try {
-			this.logIfDebug("Setting charging current to " + current + " mA");
-			this.setChargingCurrent(current);
-		} catch (OpenemsNamedException e) {
-			this.logError(this.log, "Failed to set charging current: " + e.getMessage());
+		if (this.config.simulationMode() && this.simulator != null) {
+			this.logIfDebug("Setting simulated charging current to " + current + " mA");
+			this.simulator.setCurrentLimit(current);
+		} else {
+			try {
+				this.logIfDebug("Setting charging current to " + current + " mA");
+				this.setChargingCurrent(current);
+			} catch (OpenemsNamedException e) {
+				this.logError(this.log, "Failed to set charging current: " + e.getMessage());
+			}
 		}
 	}
 

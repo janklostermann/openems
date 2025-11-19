@@ -40,6 +40,7 @@ public class MyConfig extends AbstractComponentConfig implements Config {
 		private boolean enabled = true;
 		private boolean readOnly = false;
 		private boolean debugMode = false;
+		private boolean simulationMode = false;
 		private SingleOrThreePhase wiring = SingleOrThreePhase.THREE_PHASE;
 		private PhaseRotation phaseRotation = PhaseRotation.L1_L2_L3;
 		private String modbusId = "modbus0";
@@ -101,6 +102,17 @@ public class MyConfig extends AbstractComponentConfig implements Config {
 		 */
 		public Builder setDebugMode(boolean debugMode) {
 			this.debugMode = debugMode;
+			return this;
+		}
+
+		/**
+		 * Set whether simulation mode is enabled.
+		 *
+		 * @param simulationMode true to use internal simulator
+		 * @return this builder
+		 */
+		public Builder setSimulationMode(boolean simulationMode) {
+			this.simulationMode = simulationMode;
 			return this;
 		}
 
@@ -194,6 +206,11 @@ public class MyConfig extends AbstractComponentConfig implements Config {
 	@Override
 	public boolean debugMode() {
 		return this.builder.debugMode;
+	}
+
+	@Override
+	public boolean simulationMode() {
+		return this.builder.simulationMode;
 	}
 
 	@Override

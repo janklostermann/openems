@@ -1,0 +1,210 @@
+= ABL EVCC2/3 Chargepoint
+
+This bundle implements support for ABL EVCC2/3 electric vehicle charging stations.
+
+== Overview
+
+The ABL EVCC2/3 is a commercial-grade charging station that supports both single-phase and three-phase charging up to 22 kW. This OpenEMS component communicates with the charger via Modbus ASCII over RS485.
+
+== Features
+
+* IEC 61851-1 compliant state machine
+* Configurable maximum charging current (6A - 32A)
+* Single-phase and three-phase support
+* Phase rotation configuration
+* Read-only monitoring mode
+* Simulation mode for testing without hardware
+* Debug mode with raw register visualization
+
+== Configuration
+
+[cols="1,1,3"]
+|===
+| Parameter | Default | Description
+
+| Component-ID | evseChargePoint0 | Unique ID for this component
+| Alias | - | Human-readable name
+| Is enabled? | true | Enable/disable the component
+| Read only | false | Monitor-only mode (no control)
+| Debug Mode | false | Enable raw register visualization
+| Simulation Mode | false | Use internal simulator instead of hardware
+| Hardware Wiring | THREE_PHASE | Physical wiring configuration
+| Phase Rotation | L1_L2_L3 | Apply standard or rotated wiring
+| Modbus-ID | modbus0 | Reference to Modbus bridge
+| Modbus Unit-ID | 1 | Modbus device address (1-255)
+| Maximum Current | 32 | Maximum supported current in Ampere
+|===
+
+== Charging States
+
+The ABL uses IEC 61851-1 states with substates:
+
+[cols="1,1,3"]
+|===
+| State | Status | Description
+
+| A1 | Not Ready | Charging station not ready
+| A2 | Not Ready | Charging station ready, no vehicle
+| B1 | Connected | Vehicle connected, not ready to charge
+| B2 | Ready for Charging | Vehicle connected, ready to charge
+| C1 | Ready for Charging | Vehicle requests charging
+| C2 | Charging | Active charging
+| D1 | Ready for Charging | Ventilation requested
+| D2 | Charging | Charging with ventilation required
+| E0 | Error | Charging station error
+| F0 | Not Available | Charging station not available
+|===
+
+== Modbus Protocol
+
+=== Register Map
+
+[cols="1,2,3"]
+|===
+| Address | Name | Description
+
+| 0x0001 | Device ID | Device identification (bits 21..16)
+| 0x0002 | Firmware Version | Major.Minor version number
+| 0x0033 | EV Connected | Bit 39: 0=No EV, 1=EV connected
+| 0x0034 | State + Current L1 | High byte: state, Low byte: L1 current (A)
+| 0x0035 | Current L2 + L3 | High byte: L2 current, Low byte: L3 current
+| 0x0014 | Set Icmax | Duty cycle % * 10 (write only)
+|===
+
+=== Current Encoding
+
+Phase currents are encoded in single bytes (0x00-0x63 = 0-99 A, 0x64 = invalid).
+
+The set current register uses duty cycle encoding:
+
+* 6A corresponds to ~10% duty cycle (0x0064)
+* 32A corresponds to ~53% duty cycle (0x0214)
+
+== Simulation Mode
+
+Simulation mode allows testing the charging logic without physical hardware. Enable it by setting `Simulation Mode = true` in the configuration.
+
+=== How It Works
+
+When simulation mode is enabled:
+
+1. No Modbus connection is required
+2. An internal state machine simulates charger behavior
+3. Control channels allow manual simulation control
+4. Electrical values (current, power, energy) are calculated
+
+=== Control Channels
+
+[cols="1,3"]
+|===
+| Channel | Description
+
+| SimulatePlugIn | Trigger vehicle plug-in (A -> B transition)
+| SimulateUnplug | Trigger vehicle unplug (-> A transition)
+| SimulateError | Set error state (-> E0)
+| SimulateClearError | Clear error state (E0 -> A)
+|===
+
+=== Example Usage
+
+1. Enable simulation mode in configuration
+2. Open the debug HTML page to visualize state
+3. Use the "Plug In" button to simulate vehicle connection
+4. Set charging current via the controller
+5. Monitor state transitions and energy calculations
+
+== Debug Mode
+
+Debug mode provides raw register visualization through a web interface.
+
+=== Accessing Debug Page
+
+When debug mode is enabled, access the debug page at:
+
+----
+http://localhost:8084/openems/edge/io.openems.edge.evse.chargepoint.abl/abl-debug.html
+----
+
+=== Features
+
+* Real-time state monitoring
+* Raw register values in hex format
+* Physical value conversion
+* Manual value override (for testing)
+* Simulation control buttons
+
+== Wiring Configuration
+
+=== Hardware Wiring
+
+Configure based on actual physical wiring:
+
+* `SINGLE_PHASE` - L1 only (max 7.4 kW @ 32A)
+* `THREE_PHASE` - L1, L2, L3 (max 22 kW @ 32A)
+
+=== Phase Rotation
+
+If your installation has rotated phases, configure accordingly:
+
+* `L1_L2_L3` - Standard rotation
+* `L2_L3_L1` - Rotated +1
+* `L3_L1_L2` - Rotated +2
+
+== Integration
+
+=== With Energy Management Controller
+
+The ABL component implements `EvseChargePoint` and `ElectricityMeter` interfaces, making it compatible with OpenEMS energy management controllers like:
+
+* `io.openems.edge.controller.evse.cluster`
+* `io.openems.edge.controller.evse.fixactivepowercharge`
+
+=== With Timedata
+
+Enable historical data logging by configuring a Timedata provider (e.g., InfluxDB).
+
+== Troubleshooting
+
+=== Common Issues
+
+1. **No communication**: Check RS485 wiring, Modbus address, and baud rate
+2. **Invalid current readings**: Value 0x64 indicates sensor error
+3. **State stuck in E0**: Check charger error codes and clear fault
+
+=== Debug Logging
+
+Enable debug mode to see detailed register values and state transitions in the log.
+
+== Testing
+
+=== Unit Tests
+
+The component includes comprehensive unit tests:
+
+* Activation and lifecycle tests
+* Configuration modification tests
+* Simulation mode tests
+* State machine logic tests
+
+Run tests with:
+
+----
+./gradlew :io.openems.edge.evse.chargepoint.abl:test
+----
+
+=== Integration Testing
+
+Use simulation mode for integration testing without hardware:
+
+[source,java]
+----
+MyConfig config = MyConfig.create()
+    .setId("evcs0")
+    .setSimulationMode(true)
+    .build();
+----
+
+== See Also
+
+* link:../io.openems.edge.evse.simulator/doc/readme.adoc[EVSE Simulator Core] - Shared simulation logic
+* link:../io.openems.edge.evse.chargepoint.alfen/doc/readme.adoc[Alfen Chargepoint] - Similar implementation for Alfen Eve
