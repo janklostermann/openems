@@ -279,13 +279,12 @@ public class EvseChargePointAlfenImpl extends AbstractOpenemsModbusComponent
 
 		// Update electrical values
 		int voltageL1 = (int) (this.simulator.getVoltageL1() * 1000); // mV
-		int voltageL2 = (int) (this.simulator.getVoltageL2() * 1000);
-		int voltageL3 = (int) (this.simulator.getVoltageL3() * 1000);
-		int currentMa = (int) (this.simulator.getCurrentAmps() * 1000);
-
 		setValue(this, ElectricityMeter.ChannelId.VOLTAGE_L1, voltageL1);
+		int voltageL2 = (int) (this.simulator.getVoltageL2() * 1000);
 		setValue(this, ElectricityMeter.ChannelId.VOLTAGE_L2, voltageL2);
+		int voltageL3 = (int) (this.simulator.getVoltageL3() * 1000);
 		setValue(this, ElectricityMeter.ChannelId.VOLTAGE_L3, voltageL3);
+		int currentMa = (int) (this.simulator.getCurrentAmps() * 1000);
 		setValue(this, ElectricityMeter.ChannelId.CURRENT_L1, currentMa);
 		setValue(this, ElectricityMeter.ChannelId.CURRENT_L2, this.simulator.getPhases() == 3 ? currentMa : 0);
 		setValue(this, ElectricityMeter.ChannelId.CURRENT_L3, this.simulator.getPhases() == 3 ? currentMa : 0);
@@ -315,35 +314,42 @@ public class EvseChargePointAlfenImpl extends AbstractOpenemsModbusComponent
 	}
 
 	private void updateRawRegisterChannels() {
-		// Get current values and format as hex
-		var voltageL1 = this.getVoltageL1Channel().value().get();
-		var voltageL2 = this.getVoltageL2Channel().value().get();
-		var voltageL3 = this.getVoltageL3Channel().value().get();
-		var currentL1 = this.getCurrentL1Channel().value().get();
-		var currentL2 = this.getCurrentL2Channel().value().get();
-		var currentL3 = this.getCurrentL3Channel().value().get();
-		var power = this.getActivePowerChannel().value().get();
-		var energy = this.channel(EvseChargePointAlfen.ChannelId.TOTAL_ENERGY).value().get();
-		var state = this.channel(EvseChargePointAlfen.ChannelId.RAW_CHARGING_STATE).value().get();
-		var maxCurrent = this.channel(EvseChargePointAlfen.ChannelId.DEBUG_SET_CHARGING_CURRENT).value().get();
-
 		// Format values as hex strings (simulating Float32/64 encoding)
+		var voltageL1 = this.getVoltageL1Channel().value().get();
 		setValue(this, EvseChargePointAlfen.ChannelId.RAW_VOLTAGE_L1,
 				voltageL1 != null ? floatToHex(voltageL1 / 1000f) : "N/A");
+
+		var voltageL2 = this.getVoltageL2Channel().value().get();
 		setValue(this, EvseChargePointAlfen.ChannelId.RAW_VOLTAGE_L2,
 				voltageL2 != null ? floatToHex(voltageL2 / 1000f) : "N/A");
+
+		var voltageL3 = this.getVoltageL3Channel().value().get();
 		setValue(this, EvseChargePointAlfen.ChannelId.RAW_VOLTAGE_L3,
 				voltageL3 != null ? floatToHex(voltageL3 / 1000f) : "N/A");
+
+		var currentL1 = this.getCurrentL1Channel().value().get();
 		setValue(this, EvseChargePointAlfen.ChannelId.RAW_CURRENT_L1,
 				currentL1 != null ? floatToHex(currentL1 / 1000f) : "N/A");
+
+		var currentL2 = this.getCurrentL2Channel().value().get();
 		setValue(this, EvseChargePointAlfen.ChannelId.RAW_CURRENT_L2,
 				currentL2 != null ? floatToHex(currentL2 / 1000f) : "N/A");
+
+		var currentL3 = this.getCurrentL3Channel().value().get();
 		setValue(this, EvseChargePointAlfen.ChannelId.RAW_CURRENT_L3,
 				currentL3 != null ? floatToHex(currentL3 / 1000f) : "N/A");
+
+		var power = this.getActivePowerChannel().value().get();
 		setValue(this, EvseChargePointAlfen.ChannelId.RAW_POWER, power != null ? doubleToHex((Integer) power) : "N/A");
+
+		var energy = this.channel(EvseChargePointAlfen.ChannelId.TOTAL_ENERGY).value().get();
 		setValue(this, EvseChargePointAlfen.ChannelId.RAW_ENERGY,
 				energy != null ? doubleToHex(((Number) energy).doubleValue()) : "N/A");
+
+		var state = this.channel(EvseChargePointAlfen.ChannelId.RAW_CHARGING_STATE).value().get();
 		setValue(this, EvseChargePointAlfen.ChannelId.RAW_STATE, state != null ? stringToHex(state.toString()) : "N/A");
+
+		var maxCurrent = this.channel(EvseChargePointAlfen.ChannelId.DEBUG_SET_CHARGING_CURRENT).value().get();
 		setValue(this, EvseChargePointAlfen.ChannelId.RAW_MAX_CURRENT,
 				maxCurrent != null ? floatToHex(((Number) maxCurrent).floatValue()) : "N/A");
 	}
