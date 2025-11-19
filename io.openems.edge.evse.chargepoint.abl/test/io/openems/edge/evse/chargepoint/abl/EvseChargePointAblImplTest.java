@@ -354,19 +354,19 @@ public class EvseChargePointAblImplTest {
 	 */
 	@Test
 	public void testEvaluateIsReadyForCharging() {
-		// States that should be ready
-		assertTrue(EvseChargePointAblImpl.evaluateIsReadyForCharging(ChargingState.B2));
-		assertTrue(EvseChargePointAblImpl.evaluateIsReadyForCharging(ChargingState.C1));
-		assertTrue(EvseChargePointAblImpl.evaluateIsReadyForCharging(ChargingState.C2));
-		assertTrue(EvseChargePointAblImpl.evaluateIsReadyForCharging(ChargingState.D1));
-		assertTrue(EvseChargePointAblImpl.evaluateIsReadyForCharging(ChargingState.D2));
+		// States that should be ready (READY_FOR_CHARGING or CHARGING status)
+		assertTrue(EvseChargePointAblImpl.evaluateIsReadyForCharging(ChargingState.B1)); // EV asking for charging
+		assertTrue(EvseChargePointAblImpl.evaluateIsReadyForCharging(ChargingState.B2)); // EV has permission
+		assertTrue(EvseChargePointAblImpl.evaluateIsReadyForCharging(ChargingState.C2)); // Charging
+		assertTrue(EvseChargePointAblImpl.evaluateIsReadyForCharging(ChargingState.C3)); // Charging reduced
+		assertTrue(EvseChargePointAblImpl.evaluateIsReadyForCharging(ChargingState.C4)); // Charging reduced
 
 		// States that should not be ready
-		assertEquals(false, EvseChargePointAblImpl.evaluateIsReadyForCharging(ChargingState.A1));
-		assertEquals(false, EvseChargePointAblImpl.evaluateIsReadyForCharging(ChargingState.A2));
-		assertEquals(false, EvseChargePointAblImpl.evaluateIsReadyForCharging(ChargingState.B1));
-		assertEquals(false, EvseChargePointAblImpl.evaluateIsReadyForCharging(ChargingState.E0));
-		assertEquals(false, EvseChargePointAblImpl.evaluateIsReadyForCharging(ChargingState.F0));
+		assertEquals(false, EvseChargePointAblImpl.evaluateIsReadyForCharging(ChargingState.A1)); // Waiting for EV
+		assertEquals(false, EvseChargePointAblImpl.evaluateIsReadyForCharging(ChargingState.E0)); // Outlet disabled
+		assertEquals(false, EvseChargePointAblImpl.evaluateIsReadyForCharging(ChargingState.E1)); // Production test
+		assertEquals(false, EvseChargePointAblImpl.evaluateIsReadyForCharging(ChargingState.F1)); // Error
+		assertEquals(false, EvseChargePointAblImpl.evaluateIsReadyForCharging(ChargingState.F2)); // Error
 
 		// Null handling
 		assertEquals(false, EvseChargePointAblImpl.evaluateIsReadyForCharging(null));

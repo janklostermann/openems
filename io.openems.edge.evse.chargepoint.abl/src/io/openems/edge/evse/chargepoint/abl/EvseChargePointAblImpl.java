@@ -344,32 +344,32 @@ public class EvseChargePointAblImpl extends AbstractOpenemsModbusComponent
 
 	private void handleSimulationMode() {
 		// Process simulation control channels
-		var plugIn = this.<Boolean>channel(EvseChargePointAbl.ChannelId.SIMULATE_PLUG_IN).getNextWriteValue();
+		var plugInChannel = (io.openems.edge.common.channel.BooleanWriteChannel) this
+				.channel(EvseChargePointAbl.ChannelId.SIMULATE_PLUG_IN);
+		var plugIn = plugInChannel.getNextWriteValueAndReset();
 		if (plugIn.isPresent() && plugIn.get()) {
 			this.simulator.plugIn();
-			this.<io.openems.edge.common.channel.BooleanWriteChannel>channel(
-					EvseChargePointAbl.ChannelId.SIMULATE_PLUG_IN).setNextValue(false);
 		}
 
-		var unplug = this.<Boolean>channel(EvseChargePointAbl.ChannelId.SIMULATE_UNPLUG).getNextWriteValue();
+		var unplugChannel = (io.openems.edge.common.channel.BooleanWriteChannel) this
+				.channel(EvseChargePointAbl.ChannelId.SIMULATE_UNPLUG);
+		var unplug = unplugChannel.getNextWriteValueAndReset();
 		if (unplug.isPresent() && unplug.get()) {
 			this.simulator.unplug();
-			this.<io.openems.edge.common.channel.BooleanWriteChannel>channel(
-					EvseChargePointAbl.ChannelId.SIMULATE_UNPLUG).setNextValue(false);
 		}
 
-		var error = this.<Boolean>channel(EvseChargePointAbl.ChannelId.SIMULATE_ERROR).getNextWriteValue();
+		var errorChannel = (io.openems.edge.common.channel.BooleanWriteChannel) this
+				.channel(EvseChargePointAbl.ChannelId.SIMULATE_ERROR);
+		var error = errorChannel.getNextWriteValueAndReset();
 		if (error.isPresent() && error.get()) {
 			this.simulator.setError();
-			this.<io.openems.edge.common.channel.BooleanWriteChannel>channel(
-					EvseChargePointAbl.ChannelId.SIMULATE_ERROR).setNextValue(false);
 		}
 
-		var clearError = this.<Boolean>channel(EvseChargePointAbl.ChannelId.SIMULATE_CLEAR_ERROR).getNextWriteValue();
+		var clearErrorChannel = (io.openems.edge.common.channel.BooleanWriteChannel) this
+				.channel(EvseChargePointAbl.ChannelId.SIMULATE_CLEAR_ERROR);
+		var clearError = clearErrorChannel.getNextWriteValueAndReset();
 		if (clearError.isPresent() && clearError.get()) {
 			this.simulator.clearError();
-			this.<io.openems.edge.common.channel.BooleanWriteChannel>channel(
-					EvseChargePointAbl.ChannelId.SIMULATE_CLEAR_ERROR).setNextValue(false);
 		}
 
 		// Tick the simulator
@@ -452,7 +452,7 @@ public class EvseChargePointAblImpl extends AbstractOpenemsModbusComponent
 		setValue(this, EvseChargePointAbl.ChannelId.RAW_CURRENT_L3,
 				currentL3 != null ? String.format("%02X", ((Integer) currentL3) & 0xFF) : "N/A");
 		setValue(this, EvseChargePointAbl.ChannelId.RAW_STATE,
-				state != null ? String.format("%02X", state.value) : "N/A");
+				state != null ? String.format("%02X", state.getValue()) : "N/A");
 		setValue(this, EvseChargePointAbl.ChannelId.RAW_EV_CONNECTED,
 				evConnected != null ? (Boolean.TRUE.equals(evConnected) ? "01" : "00") : "N/A");
 	}
@@ -462,9 +462,9 @@ public class EvseChargePointAblImpl extends AbstractOpenemsModbusComponent
 		case A -> ChargingState.A1;
 		case B -> ChargingState.B1;
 		case C -> ChargingState.C2;
-		case D -> ChargingState.D2;
+		case D -> ChargingState.F7; // State D requested by EV (ABL treats as error)
 		case E -> ChargingState.E0;
-		case F -> ChargingState.F0;
+		case F -> ChargingState.E0; // Not available -> Outlet disabled
 		};
 	}
 

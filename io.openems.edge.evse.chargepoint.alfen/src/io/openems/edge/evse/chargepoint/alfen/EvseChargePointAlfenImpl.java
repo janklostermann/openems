@@ -30,8 +30,8 @@ import io.openems.edge.bridge.modbus.api.AbstractOpenemsModbusComponent;
 import io.openems.edge.bridge.modbus.api.BridgeModbus;
 import io.openems.edge.bridge.modbus.api.ModbusComponent;
 import io.openems.edge.bridge.modbus.api.ModbusProtocol;
-import io.openems.edge.bridge.modbus.api.element.FloatingPointDoublewordElement;
-import io.openems.edge.bridge.modbus.api.element.FloatingPointQuadruplewordElement;
+import io.openems.edge.bridge.modbus.api.element.FloatDoublewordElement;
+import io.openems.edge.bridge.modbus.api.element.FloatQuadruplewordElement;
 import io.openems.edge.bridge.modbus.api.element.StringWordElement;
 import io.openems.edge.bridge.modbus.api.element.UnsignedWordElement;
 import io.openems.edge.bridge.modbus.api.task.FC3ReadRegistersTask;
@@ -149,28 +149,28 @@ public class EvseChargePointAlfenImpl extends AbstractOpenemsModbusComponent
 		return new ModbusProtocol(this, //
 				// Voltage measurements (register 306-311, 3x Float32)
 				new FC3ReadRegistersTask(306, Priority.HIGH,
-						m(ElectricityMeter.ChannelId.VOLTAGE_L1, new FloatingPointDoublewordElement(306)),
-						m(ElectricityMeter.ChannelId.VOLTAGE_L2, new FloatingPointDoublewordElement(308)),
-						m(ElectricityMeter.ChannelId.VOLTAGE_L3, new FloatingPointDoublewordElement(310))),
+						m(ElectricityMeter.ChannelId.VOLTAGE_L1, new FloatDoublewordElement(306)),
+						m(ElectricityMeter.ChannelId.VOLTAGE_L2, new FloatDoublewordElement(308)),
+						m(ElectricityMeter.ChannelId.VOLTAGE_L3, new FloatDoublewordElement(310))),
 
 				// Current measurements (register 320-325, 3x Float32)
 				// Alfen reports current in Ampere, we convert to mA
 				new FC3ReadRegistersTask(320, Priority.HIGH,
-						m(ElectricityMeter.ChannelId.CURRENT_L1, new FloatingPointDoublewordElement(320),
+						m(ElectricityMeter.ChannelId.CURRENT_L1, new FloatDoublewordElement(320),
 								SCALE_FACTOR_MINUS_3),
-						m(ElectricityMeter.ChannelId.CURRENT_L2, new FloatingPointDoublewordElement(322),
+						m(ElectricityMeter.ChannelId.CURRENT_L2, new FloatDoublewordElement(322),
 								SCALE_FACTOR_MINUS_3),
-						m(ElectricityMeter.ChannelId.CURRENT_L3, new FloatingPointDoublewordElement(324),
+						m(ElectricityMeter.ChannelId.CURRENT_L3, new FloatDoublewordElement(324),
 								SCALE_FACTOR_MINUS_3)),
 
 				// Power measurement (register 344-347, Float64)
 				new FC3ReadRegistersTask(344, Priority.HIGH,
-						m(ElectricityMeter.ChannelId.ACTIVE_POWER, new FloatingPointQuadruplewordElement(344))),
+						m(ElectricityMeter.ChannelId.ACTIVE_POWER, new FloatQuadruplewordElement(344))),
 
 				// Total energy (register 374-377, Float64)
 				// Alfen reports in Wh, convert to Wh (divide by 1000 according to evcc)
 				new FC3ReadRegistersTask(374, Priority.LOW,
-						m(EvseChargePointAlfen.ChannelId.TOTAL_ENERGY, new FloatingPointQuadruplewordElement(374),
+						m(EvseChargePointAlfen.ChannelId.TOTAL_ENERGY, new FloatQuadruplewordElement(374),
 								v -> v == null ? null : Math.round((Double) v))),
 
 				// Charging state (register 1201, String 5 registers)
@@ -180,10 +180,10 @@ public class EvseChargePointAlfenImpl extends AbstractOpenemsModbusComponent
 				// Max current setting (register 1210, Float32 in mA)
 				new FC3ReadRegistersTask(1210, Priority.LOW,
 						m(EvseChargePointAlfen.ChannelId.SET_CHARGING_CURRENT,
-								new FloatingPointDoublewordElement(1210))),
+								new FloatDoublewordElement(1210))),
 				new FC6WriteRegisterTask(1210,
 						m(EvseChargePointAlfen.ChannelId.SET_CHARGING_CURRENT,
-								new FloatingPointDoublewordElement(1210))),
+								new FloatDoublewordElement(1210))),
 
 				// Phase configuration (register 1215, Uint16)
 				new FC3ReadRegistersTask(1215, Priority.LOW,
@@ -236,32 +236,32 @@ public class EvseChargePointAlfenImpl extends AbstractOpenemsModbusComponent
 
 	private void handleSimulationMode() {
 		// Process simulation control channels
-		var plugIn = this.<Boolean>channel(EvseChargePointAlfen.ChannelId.SIMULATE_PLUG_IN).getNextWriteValue();
+		var plugInChannel = (io.openems.edge.common.channel.BooleanWriteChannel) this
+				.channel(EvseChargePointAlfen.ChannelId.SIMULATE_PLUG_IN);
+		var plugIn = plugInChannel.getNextWriteValueAndReset();
 		if (plugIn.isPresent() && plugIn.get()) {
 			this.simulator.plugIn();
-			this.<io.openems.edge.common.channel.BooleanWriteChannel>channel(
-					EvseChargePointAlfen.ChannelId.SIMULATE_PLUG_IN).setNextValue(false);
 		}
 
-		var unplug = this.<Boolean>channel(EvseChargePointAlfen.ChannelId.SIMULATE_UNPLUG).getNextWriteValue();
+		var unplugChannel = (io.openems.edge.common.channel.BooleanWriteChannel) this
+				.channel(EvseChargePointAlfen.ChannelId.SIMULATE_UNPLUG);
+		var unplug = unplugChannel.getNextWriteValueAndReset();
 		if (unplug.isPresent() && unplug.get()) {
 			this.simulator.unplug();
-			this.<io.openems.edge.common.channel.BooleanWriteChannel>channel(
-					EvseChargePointAlfen.ChannelId.SIMULATE_UNPLUG).setNextValue(false);
 		}
 
-		var error = this.<Boolean>channel(EvseChargePointAlfen.ChannelId.SIMULATE_ERROR).getNextWriteValue();
+		var errorChannel = (io.openems.edge.common.channel.BooleanWriteChannel) this
+				.channel(EvseChargePointAlfen.ChannelId.SIMULATE_ERROR);
+		var error = errorChannel.getNextWriteValueAndReset();
 		if (error.isPresent() && error.get()) {
 			this.simulator.setError();
-			this.<io.openems.edge.common.channel.BooleanWriteChannel>channel(
-					EvseChargePointAlfen.ChannelId.SIMULATE_ERROR).setNextValue(false);
 		}
 
-		var clearError = this.<Boolean>channel(EvseChargePointAlfen.ChannelId.SIMULATE_CLEAR_ERROR).getNextWriteValue();
+		var clearErrorChannel = (io.openems.edge.common.channel.BooleanWriteChannel) this
+				.channel(EvseChargePointAlfen.ChannelId.SIMULATE_CLEAR_ERROR);
+		var clearError = clearErrorChannel.getNextWriteValueAndReset();
 		if (clearError.isPresent() && clearError.get()) {
 			this.simulator.clearError();
-			this.<io.openems.edge.common.channel.BooleanWriteChannel>channel(
-					EvseChargePointAlfen.ChannelId.SIMULATE_CLEAR_ERROR).setNextValue(false);
 		}
 
 		// Tick the simulator
@@ -303,8 +303,10 @@ public class EvseChargePointAlfenImpl extends AbstractOpenemsModbusComponent
 		this.calculateEnergyL3.update(this.getActivePowerL3Channel().getNextValue().get());
 
 		// Parse charging state from raw string
-		var rawState = this.channel(EvseChargePointAlfen.ChannelId.RAW_CHARGING_STATE).value().asOptional();
-		var chargingState = rawState.map(ChargingState::fromString).orElse(ChargingState.UNDEFINED);
+		var rawState = this.channel(EvseChargePointAlfen.ChannelId.RAW_CHARGING_STATE).value().get();
+		var chargingState = rawState != null
+				? ChargingState.fromString(rawState.toString())
+				: ChargingState.UNDEFINED;
 		setValue(this, EvseChargePointAlfen.ChannelId.CHARGING_STATE, chargingState);
 
 		// Evaluate is ready for charging based on charging state
@@ -337,12 +339,12 @@ public class EvseChargePointAlfenImpl extends AbstractOpenemsModbusComponent
 				currentL2 != null ? floatToHex(currentL2 / 1000f) : "N/A");
 		setValue(this, EvseChargePointAlfen.ChannelId.RAW_CURRENT_L3,
 				currentL3 != null ? floatToHex(currentL3 / 1000f) : "N/A");
-		setValue(this, EvseChargePointAlfen.ChannelId.RAW_POWER, power != null ? doubleToHex(power) : "N/A");
+		setValue(this, EvseChargePointAlfen.ChannelId.RAW_POWER, power != null ? doubleToHex((Integer) power) : "N/A");
 		setValue(this, EvseChargePointAlfen.ChannelId.RAW_ENERGY,
-				energy != null ? doubleToHex(energy.doubleValue()) : "N/A");
+				energy != null ? doubleToHex(((Number) energy).doubleValue()) : "N/A");
 		setValue(this, EvseChargePointAlfen.ChannelId.RAW_STATE, state != null ? stringToHex(state.toString()) : "N/A");
 		setValue(this, EvseChargePointAlfen.ChannelId.RAW_MAX_CURRENT,
-				maxCurrent != null ? floatToHex(maxCurrent) : "N/A");
+				maxCurrent != null ? floatToHex(((Number) maxCurrent).floatValue()) : "N/A");
 	}
 
 	private static String floatToHex(float value) {
