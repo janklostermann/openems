@@ -26,12 +26,14 @@ import io.openems.common.exceptions.OpenemsError.OpenemsNamedException;
 import io.openems.common.exceptions.OpenemsException;
 import io.openems.edge.bridge.modbus.api.AbstractOpenemsModbusComponent;
 import io.openems.edge.bridge.modbus.api.BridgeModbus;
+import io.openems.edge.bridge.modbus.api.ElementToChannelConverter;
 import io.openems.edge.bridge.modbus.api.ModbusComponent;
 import io.openems.edge.bridge.modbus.api.ModbusProtocol;
 import io.openems.edge.bridge.modbus.api.element.FloatDoublewordElement;
 import io.openems.edge.bridge.modbus.api.element.FloatQuadruplewordElement;
 import io.openems.edge.bridge.modbus.api.element.StringWordElement;
 import io.openems.edge.bridge.modbus.api.element.UnsignedWordElement;
+import io.openems.edge.bridge.modbus.api.task.FC16WriteRegistersTask;
 import io.openems.edge.bridge.modbus.api.task.FC3ReadRegistersTask;
 import io.openems.edge.bridge.modbus.api.task.FC6WriteRegisterTask;
 import io.openems.edge.common.channel.BooleanWriteChannel;
@@ -170,7 +172,7 @@ public class EvseChargePointAlfenImpl extends AbstractOpenemsModbusComponent
 				// Alfen reports in Wh, convert to Wh (divide by 1000 according to evcc)
 				new FC3ReadRegistersTask(374, Priority.LOW,
 						m(EvseChargePointAlfen.ChannelId.TOTAL_ENERGY, new FloatQuadruplewordElement(374),
-								v -> v == null ? null : Math.round((Double) v))),
+								new ElementToChannelConverter(v -> v == null ? null : Math.round((Double) v)))),
 
 				// Charging state (register 1201, String 5 registers)
 				new FC3ReadRegistersTask(1201, Priority.HIGH,
@@ -180,7 +182,7 @@ public class EvseChargePointAlfenImpl extends AbstractOpenemsModbusComponent
 				new FC3ReadRegistersTask(1210, Priority.LOW,
 						m(EvseChargePointAlfen.ChannelId.SET_CHARGING_CURRENT,
 								new FloatDoublewordElement(1210))),
-				new FC6WriteRegisterTask(1210,
+				new FC16WriteRegistersTask(1210,
 						m(EvseChargePointAlfen.ChannelId.SET_CHARGING_CURRENT,
 								new FloatDoublewordElement(1210))),
 
