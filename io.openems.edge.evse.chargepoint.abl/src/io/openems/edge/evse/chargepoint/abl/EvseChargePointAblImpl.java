@@ -435,22 +435,24 @@ public class EvseChargePointAblImpl extends AbstractOpenemsModbusComponent
 	}
 
 	private void updateRawRegisterChannels() {
-		// Get current values and format as hex
+		// Format current values as hex strings
 		var currentL1 = this.channel(EvseChargePointAbl.ChannelId.PHASE_CURRENT_L1).value().get();
-		var currentL2 = this.channel(EvseChargePointAbl.ChannelId.PHASE_CURRENT_L2).value().get();
-		var currentL3 = this.channel(EvseChargePointAbl.ChannelId.PHASE_CURRENT_L3).value().get();
-		var state = this.getChargingState();
-		var evConnected = this.channel(EvseChargePointAbl.ChannelId.EV_CONNECTED).value().get();
-
-		// Format values as hex strings
 		setValue(this, EvseChargePointAbl.ChannelId.RAW_CURRENT_L1,
 				currentL1 != null ? String.format("%02X", ((Integer) currentL1) & 0xFF) : "N/A");
+
+		var currentL2 = this.channel(EvseChargePointAbl.ChannelId.PHASE_CURRENT_L2).value().get();
 		setValue(this, EvseChargePointAbl.ChannelId.RAW_CURRENT_L2,
 				currentL2 != null ? String.format("%02X", ((Integer) currentL2) & 0xFF) : "N/A");
+
+		var currentL3 = this.channel(EvseChargePointAbl.ChannelId.PHASE_CURRENT_L3).value().get();
 		setValue(this, EvseChargePointAbl.ChannelId.RAW_CURRENT_L3,
 				currentL3 != null ? String.format("%02X", ((Integer) currentL3) & 0xFF) : "N/A");
+
+		var state = this.getChargingState();
 		setValue(this, EvseChargePointAbl.ChannelId.RAW_STATE,
 				state != null ? String.format("%02X", state.getValue()) : "N/A");
+
+		var evConnected = this.channel(EvseChargePointAbl.ChannelId.EV_CONNECTED).value().get();
 		setValue(this, EvseChargePointAbl.ChannelId.RAW_EV_CONNECTED,
 				evConnected != null ? (Boolean.TRUE.equals(evConnected) ? "01" : "00") : "N/A");
 	}
