@@ -1,9 +1,7 @@
 package io.openems.edge.evse.chargepoint.abl;
 
-import static io.openems.edge.common.channel.ChannelUtils.setValue;
 import static io.openems.common.types.OpenemsType.INTEGER;
-import static io.openems.edge.common.type.Phase.SingleOrThreePhase.SINGLE_PHASE;
-import static io.openems.edge.common.type.Phase.SingleOrThreePhase.THREE_PHASE;
+import static io.openems.edge.common.channel.ChannelUtils.setValue;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -50,7 +48,6 @@ import io.openems.edge.evse.api.chargepoint.Profile.ChargePointAbilities;
 import io.openems.edge.evse.api.chargepoint.Profile.ChargePointActions;
 import io.openems.edge.evse.api.common.ApplySetPoint;
 import io.openems.edge.evse.chargepoint.abl.enums.ChargingState;
-import io.openems.edge.evse.chargepoint.abl.enums.Status;
 import io.openems.edge.evse.simulator.core.ChargePointSimulatorCore;
 import io.openems.edge.evse.simulator.core.ChargePointState;
 import io.openems.edge.meter.api.ElectricityMeter;

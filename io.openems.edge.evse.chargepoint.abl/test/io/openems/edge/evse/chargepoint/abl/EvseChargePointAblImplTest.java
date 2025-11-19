@@ -1,7 +1,6 @@
 package io.openems.edge.evse.chargepoint.abl;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
