@@ -77,7 +77,7 @@ Work is actively happening.
 
 **AI's role:**
 - Keep task marked as `[/]` while working
-- Add "Done!" subtask when complete
+- Add "Done! <DateTime>" subtask when complete (e.g., "Done! 2025-11-23 14:30")
 - Add review request for JK
 - **Keep as `[/]` until approved**
 
@@ -276,7 +276,7 @@ project: Bridge Analyzer
 ```markdown
 - [/] ai: Create BridgeAnalyzer nature interface
   - [>] ai: Prompt: "Create BridgeAnalyzer.java following EvseChargePoint pattern..."
-  - [x] ai: Done! → bridgeanalyzer.api/src/.../BridgeAnalyzer.java:1
+  - [x] ai: Done! 2025-11-22 15:45 → bridgeanalyzer.api/src/.../BridgeAnalyzer.java:1
   - [ ] jk: Review and approve
 ```
 
@@ -339,7 +339,7 @@ project: Bridge Analyzer
 - [ ] ai: Create BridgeAnalyzer nature interface
   - Channels: OPERATING_MODE, CAPTURE_ENABLED, PACKETS_CAPTURED, LAST_TRANSACTION
   - Follow EVSE minimalist pattern
-  - [ ] ai: Done! → BridgeAnalyzer.java:1
+  - [ ] ai: Done! 2025-11-22 15:45 → BridgeAnalyzer.java:1
   - [ ] jk: Review
 ```
 
@@ -549,7 +549,7 @@ But start simple - markdown is enough!
 ## References
 
 - [edge-component.md](./edge-component.md) - OpenEMS component patterns
-- [managing-dev-assets.md](../../doc/managing-dev-assets.md) - Dev workflow
+- [managing-dev-assets.md](../../_doc/managing-dev-assets.md) - Dev workflow
 - [GitHub Markdown Task Lists](https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/about-task-lists)
 
 ---

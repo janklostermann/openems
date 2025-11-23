@@ -9,12 +9,12 @@ project: Bridge Analyzer
 ### Infrastructure Setup
 
 - [x] ai: Create managing-dev-assets.md documentation
-  - Result: doc/managing-dev-assets.md with complete workflow guide
+  - Result: _doc/managing-dev-assets.md with complete workflow guide
   - Completed: 2025-11-22
 
 - [x] ai: Set up dev-assets branch
   - Branch created and pushed to origin
-  - Contains: .claude/skills/, scripts/, doc/templates/
+  - Contains: .claude/skills/, _scripts/, doc/templates/
   - Completed: 2025-11-22
 
 - [x] ai: Retrieve edge-component.md skill
@@ -26,7 +26,7 @@ project: Bridge Analyzer
   - setup-feature-branch.sh - Create new features with assets
   - sync-dev-assets.sh - Pull latest assets
   - update-dev-asset.sh - Push asset changes back
-  - scripts/README.md - Usage documentation
+  - _scripts/README.md - Usage documentation
   - Completed: 2025-11-22
 
 - [x] ai: Create collaboration.md skill

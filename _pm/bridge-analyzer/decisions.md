@@ -4,6 +4,35 @@ project: Bridge Analyzer
 
 # Decisions
 
+## 2025-11-23: Git Workflow Clarification - Develop is Upstream Inbox Only
+- **Requested by:** jk
+- **Decision:** `develop` branch is just an inbox for upstream changes, NOT a merge target
+- **Correct Workflow:**
+  1. Pull upstream changes → `develop`
+  2. Create `feature/*` from `develop` (with dev assets)
+  3. Work in `feature/*` branches
+  4. Create clean `pr/*` branch from `feature/*` (without dev assets)
+  5. Submit PR from `pr/*` to upstream
+  6. Keep `feature/*` updated: merge `develop` into `feature/*`
+- **Rationale:** We're a fork contributing to upstream, not maintaining independent develop branch
+- **Impact:** Obsoleted prepare-merge-to-develop.sh, focus on prepare-for-PR.sh
+
+## 2025-11-23: Separate PR Branches from Feature Branches
+- **Requested by:** jk
+- **Decision:** Use separate `pr/*` branches (lowercase) for upstream PRs
+- **Workflow:**
+  - Work in `feature/bridge-analyzer` (with `_pm/`, `.claude/`, `_scripts/`, `_doc/`)
+  - Run `_scripts/prepare-for-PR.sh` to create clean `pr/bridge-analyzer`
+  - Create upstream PR from `pr/bridge-analyzer`
+- **Rationale:** Clear separation between our work environment and upstream contributions
+- **Impact:** Need prepare-for-PR.sh script, two-branch workflow for contributions
+
+## 2025-11-23: Rename to Underscore Prefixes (_pm, _doc, _scripts)
+- **Requested by:** jk
+- **Decision:** Rename `scripts/` → `_scripts/`, `doc/managing-dev-assets.md` → `_doc/`, etc.
+- **Rationale:** Clear visual distinction - underscore = our stuff, no underscore = project stuff
+- **Impact:** All dev/management files easily identifiable, sort to top of file lists
+
 ## 2025-11-22: Task Refinement with Prompt Collaboration
 - **Requested by:** jk
 - **Decision:** Tasks start as `[ ]` (open for refinement) before `[>]` (ready to start)
@@ -30,7 +59,7 @@ project: Bridge Analyzer
 - **Decision:** dev-assets branch for skills, scripts, templates
 - **Workflow:** Pull into feature branches, never merge to develop
 - **Rationale:** Keep production clean, version control dev helpers
-- **Files:** .claude/, scripts/, doc/templates/, doc/managing-dev-assets.md
+- **Files:** .claude/, _scripts/, doc/templates/, _doc/managing-dev-assets.md
 
 ## 2025-11-22: Lightweight Task Management with Markdown
 - **Requested by:** jk
