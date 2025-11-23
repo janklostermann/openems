@@ -19,8 +19,9 @@ git checkout -b "feature/$FEATURE_NAME"
 # Pull in dev assets without switching branches
 echo "Pulling development assets..."
 git checkout dev-assets -- .claude/ 2>/dev/null || echo "No .claude/ in dev-assets"
-git checkout dev-assets -- scripts/ 2>/dev/null || echo "No scripts/ in dev-assets"
-git checkout dev-assets -- doc/templates/ 2>/dev/null || echo "No doc/templates/ in dev-assets"
+git checkout dev-assets -- _scripts/ 2>/dev/null || echo "No _scripts/ in dev-assets"
+git checkout dev-assets -- _doc/ 2>/dev/null || echo "No _doc/ in dev-assets"
+git checkout dev-assets -- _pm/ 2>/dev/null || echo "No _pm/ in dev-assets (create manually for your project)"
 
 # Commit the assets if anything was added
 if ! git diff --staged --quiet; then
@@ -30,4 +31,4 @@ fi
 
 echo ""
 echo "Feature branch 'feature/$FEATURE_NAME' ready!"
-echo "Development assets are available in .claude/, scripts/, and doc/templates/"
+echo "Development assets are available in .claude/, _scripts/, _doc/, and _pm/"

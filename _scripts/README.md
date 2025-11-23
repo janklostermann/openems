@@ -5,7 +5,7 @@ Helper scripts for managing development workflows in the OpenEMS fork.
 ## Available Scripts
 
 ### `setup-feature-branch.sh`
-Create a new feature branch with development assets automatically included.
+Create a new feature branch with development assets from branch `dev-assets` automatically included.
 
 ```bash
 ./scripts/setup-feature-branch.sh <feature-name>
@@ -119,3 +119,69 @@ git branch -a | grep dev-assets
 ```bash
 git ls-tree -r dev-assets --name-only
 ```
+
+
+## Detailed description of the scripts
+
+### `_scripts/setup-feature-branch.sh`
+
+Creates a new feature branch with development assets pre-installed.
+
+**Usage:**
+```bash
+_scripts/setup-feature-branch.sh bridge-analyzer
+```
+
+**What it does:**
+1. Creates `feature/<name>` from current `develop`
+2. Pulls `.claude/`, `_scripts/`, `_doc/` from `dev-assets` branch
+3. Attempts to pull `_pm/` (usually won't exist in dev-assets, create manually)
+4. Commits assets to feature branch
+
+### `_scripts/sync-dev-assets.sh`
+
+Pulls latest development assets from `dev-assets` branch into current feature branch.
+
+**Usage:**
+```bash
+_scripts/sync-dev-assets.sh
+```
+
+**Safety:** Refuses to run on `develop` or `master` branches.
+
+### `_scripts/update-dev-asset.sh`
+
+Updates a single file in the `dev-assets` branch from your current feature branch.
+
+**Usage:**
+```bash
+_scripts/update-dev-asset.sh .claude/skills/edge-component.md
+```
+
+**Process:**
+1. Stashes current work
+2. Switches to `dev-assets`
+3. Copies specified file from feature branch
+4. Commits and pushes
+5. Returns to feature branch
+6. Restores stash
+
+### `_scripts/prepare-for-PR.sh`
+
+**Status:** In development (see `_pm/bridge-analyzer/tasks.md`)
+
+Creates a clean `pr/*` branch from `feature/*` branch for upstream pull requests.
+
+**Planned usage:**
+```bash
+# In feature/bridge-analyzer
+_scripts/prepare-for-PR.sh
+
+# Creates pr/bridge-analyzer without dev assets
+# Then create PR from pr/bridge-analyzer to upstream
+```
+
+**Questions being resolved:**
+- Implementation approach (git-filter-branch vs simple checkout/remove)
+- Incremental update vs rebuild strategy
+- Branch lifecycle (keep vs delete after merge)

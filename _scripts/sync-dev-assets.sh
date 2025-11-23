@@ -12,8 +12,9 @@ echo "Syncing development assets from dev-assets branch..."
 git fetch origin dev-assets
 
 git checkout origin/dev-assets -- .claude/ 2>/dev/null || echo "No .claude/ in dev-assets"
-git checkout origin/dev-assets -- scripts/ 2>/dev/null || echo "No scripts/ in dev-assets"
-git checkout origin/dev-assets -- doc/templates/ 2>/dev/null || echo "No doc/templates/ in dev-assets"
+git checkout origin/dev-assets -- _scripts/ 2>/dev/null || echo "No _scripts/ in dev-assets"
+git checkout origin/dev-assets -- _doc/ 2>/dev/null || echo "No _doc/ in dev-assets"
+# Note: _pm/ is project-specific and not synced from dev-assets
 
 if ! git diff --staged --quiet; then
     echo ""
