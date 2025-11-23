@@ -1,0 +1,324 @@
+= Bridge Analyzer Implementation Roadmap
+
+This document outlines the phased implementation approach for the Bridge Analyzer infrastructure.
+
+== Overview
+
+The Bridge Analyzer implementation is divided into three major phases:
+
+* **Phase 1: READ_ONLY Foundation** - Basic capture and observation (Initial PR)
+* **Phase 2: PASSTHROUGH Enhancement** - Active interception and modification
+* **Phase 3: SIMULATION Extension** - Full device emulation
+
+Each phase builds upon the previous, allowing incremental delivery of value while managing complexity.
+
+== Phase 1: READ_ONLY Foundation _(Target: Initial PR)_
+
+=== Objectives
+* Establish core analyzer architecture
+* Implement basic Modbus traffic capture
+* Provide UI visualization of captured data
+* Validate performance and thread safety
+
+=== Components to Implement
+
+==== 1.1 API Bundle (`io.openems.edge.analyzer.api`)
+
+**Tasks:**
+1. Define `BridgeAnalyzer` nature interface
+2. Define `OperatingMode` enum
+3. Create standard channel definitions
+4. Write JavaDoc documentation
+5. Create package-info.java for OSGi exports
+
+**Deliverables:**
+* `BridgeAnalyzer.java` - Main nature interface
+* `OperatingMode.java` - Operating mode enumeration
+* `package-info.java` - OSGi package annotations
+* `readme.adoc` - API documentation
+* `doc/requirements.adoc` - Requirements specification
+* `doc/roadmap.adoc` - This document
+
+==== 1.2 Modbus Analyzer Implementation (`io.openems.edge.analyzer.modbus`)
+
+**Tasks:**
+1. Create bundle structure
+2. Implement `BridgeModbus` and `BridgeAnalyzer` interfaces
+3. Create configuration interface with bridge reference
+4. Implement protocol capture logic
+5. Add Modbus-specific channels (function code, register address, etc.)
+6. Implement circular buffer for packet storage
+7. Add packet formatting for UI display
+8. Create unit tests
+9. Create integration test with dummy Modbus device
+
+**Deliverables:**
+* `ModbusAnalyzerImpl.java` - Main implementation
+* `Config.java` - OSGi configuration
+* `ModbusPacket.java` - Captured packet representation
+* `PacketBuffer.java` - Circular buffer implementation
+* `ModbusPacketFormatter.java` - Format packets for display
+* `readme.adoc` - Usage documentation
+* `doc/integration-guide.adoc` - Integration instructions
+* `test/ModbusAnalyzerTest.java` - Unit tests
+
+==== 1.3 Architecture Pattern
+
+**Approach for Phase 1:**
+The analyzer acts as a **separate component** that references the actual bridge. It does NOT sit between components and bridges (that requires bridge API changes).
+
+```
+┌─────────────┐                                    ┌──────────────┐
+│   Modbus    │ ──────registers protocol──────────► │    Modbus    │
+│   Device    │                                     │    Bridge    │
+│  Component  │                                     └──────────────┘
+└─────────────┘                                            │
+                                                           │ (logs via
+                                                           │  custom
+                                                           │  verbosity)
+                                                           ▼
+                                                   ┌──────────────┐
+                                                   │    Modbus    │
+                                                   │   Analyzer   │
+                                                   │  (captures   │
+                                                   │   via bridge │
+                                                   │   logging)   │
+                                                   └──────────────┘
+```
+
+**Implementation Strategy:**
+* Leverage existing bridge `LogVerbosity` mechanism
+* Analyzer subscribes to bridge logging events
+* Parse log output to reconstruct packets
+* Store in circular buffer
+* Expose via channels
+
+**Alternative (if logging approach insufficient):**
+* Add hook/listener mechanism to bridge (requires bridge modification)
+* This becomes Phase 1.5 if needed
+
+==== 1.4 UI Integration
+
+**Tasks:**
+1. Create UI component to display analyzer channels
+2. Format Modbus packets in human-readable form
+3. Add hex dump view
+4. Implement real-time updates
+5. Add enable/disable capture control
+
+**Location:** `ui/src/app/edge/history/analyzer/` or similar
+
+**Deliverables:**
+* Angular component for analyzer view
+* Service to fetch analyzer data
+* Formatting utilities for Modbus packets
+
+=== Phase 1 Success Criteria
+
+* [ ] `io.openems.edge.analyzer.api` bundle builds successfully
+* [ ] `io.openems.edge.analyzer.modbus` bundle builds successfully
+* [ ] Unit tests pass with >80% code coverage
+* [ ] Integration test with dummy Modbus device passes
+* [ ] Can capture Modbus TCP traffic from real device
+* [ ] Can capture Modbus RTU traffic from real device
+* [ ] Last transaction visible in UI
+* [ ] Packet counter increments correctly
+* [ ] Buffer overruns detected when buffer full
+* [ ] No impact on device communication (<5% overhead)
+* [ ] No memory leaks after 24h operation
+* [ ] Documentation complete (readme, JavaDoc, integration guide)
+* [ ] Code passes Checkstyle validation
+* [ ] `prepare-commit.sh` runs without errors
+
+=== Phase 1 Timeline Estimate
+
+**Development:**
+* API bundle: 4-8 hours
+* Modbus analyzer: 16-24 hours
+* UI integration: 8-16 hours
+* Testing & documentation: 8-16 hours
+* **Total: 36-64 hours**
+
+**Note:** Timeline excludes code review iterations and depends on developer familiarity with OpenEMS architecture.
+
+== Phase 2: PASSTHROUGH Enhancement _(Future)_
+
+=== Objectives
+* Enable active interception of protocol traffic
+* Allow modification of requests and responses
+* Support delay injection for timing tests
+* Maintain protocol integrity and safety
+
+=== Required Changes
+
+==== 2.1 Bridge API Modification
+The passthrough pattern requires bridges to support "middleware" or "interceptor" concepts.
+
+**Options to evaluate:**
+1. **Chain-of-responsibility pattern** - Bridges support stacked interceptors
+2. **Event-based hooks** - Bridges emit events before/after communication
+3. **Proxy pattern** - Analyzer presents as bridge, wraps real bridge
+
+**Preferred approach:** Event-based hooks (lowest impact on existing code)
+
+==== 2.2 Analyzer Enhancements
+
+**New features:**
+* Request modification API
+* Response modification API
+* Delay injection configuration
+* Protocol validation (ensure modifications don't break protocol)
+* Safety interlocks (prevent dangerous modifications)
+
+**New channels:**
+* `MODIFICATION_ENABLED` - Whether modifications are active
+* `MODIFICATIONS_APPLIED` - Count of modified packets
+* `PROTOCOL_ERRORS` - Validation failures
+
+==== 2.3 UI Enhancements
+
+**New capabilities:**
+* Configure modification rules
+* Enable/disable modifications at runtime
+* Highlight modified packets
+* Show before/after comparison
+
+=== Phase 2 Success Criteria
+
+* [ ] Can modify Modbus register values in requests
+* [ ] Can modify response data
+* [ ] Can inject delays between request and response
+* [ ] Protocol validation prevents invalid modifications
+* [ ] Safety checks prevent dangerous modifications (e.g., emergency stop)
+* [ ] UI shows modification status clearly
+* [ ] Documentation includes safety warnings
+
+=== Phase 2 Dependencies
+
+* Phase 1 complete and stable
+* Bridge API modification approved by OpenEMS maintainers
+* Community consensus on safety mechanisms
+
+== Phase 3: SIMULATION Extension _(Future)_
+
+=== Objectives
+* Replace real devices with simulated responses
+* Support offline development and testing
+* Enable scenario reproduction for debugging
+* Provide training and demonstration capabilities
+
+=== Required Components
+
+==== 3.1 Device Behavior Engine
+
+**Features:**
+* Stateful device simulation
+* Configurable register maps
+* Response pattern definitions
+* State transition logic
+
+==== 3.2 Configuration Interface
+
+**Capabilities:**
+* Define simulated device characteristics
+* Configure initial states
+* Set up response patterns
+* Import/export device profiles
+
+==== 3.3 Scenario Playback
+
+**Features:**
+* Record real device behavior
+* Replay recorded sessions
+* Step-through debugging
+* Scenario scripting
+
+=== Phase 3 Success Criteria
+
+* [ ] Can simulate complete Modbus device
+* [ ] Stateful simulation (e.g., SOC changes based on power)
+* [ ] Can record and replay device sessions
+* [ ] Support multiple simultaneous simulated devices
+* [ ] Configuration import/export works
+* [ ] Documentation includes device profile examples
+
+=== Phase 3 Dependencies
+
+* Phase 2 complete
+* Field testing validates need for simulation
+* Resources available for extended development
+
+== Alternative Bridge Support _(Parallel to Phases)_
+
+Once Modbus analyzer is stable, the pattern can be extended to other bridges:
+
+=== HTTP Analyzer (`io.openems.edge.analyzer.http`)
+* Capture HTTP requests/responses
+* Display JSON/XML payloads
+* Support for REST API debugging
+
+=== M-Bus Analyzer (`io.openems.edge.analyzer.mbus`)
+* Capture M-Bus telegrams
+* Decode device information
+* Support for meter reading analysis
+
+=== OneWire Analyzer (`io.openems.edge.analyzer.onewire`)
+* Capture OneWire transactions
+* Support for temperature sensor debugging
+
+**Effort per additional protocol:** 8-16 hours (following established pattern)
+
+== Technical Debt and Refactoring
+
+As the implementation progresses, consider these improvements:
+
+=== Modbus Bridge Enhancement
+If Phase 1 logging approach proves insufficient:
+* Add formal listener/observer pattern to bridges
+* Define standard interception API
+* Refactor existing bridges to support
+
+=== Packet Storage Optimization
+If buffer memory becomes issue:
+* Implement compression for stored packets
+* Add intelligent filtering (e.g., only errors)
+* Support external storage (file, database)
+
+=== UI Performance
+If real-time updates cause UI lag:
+* Implement virtual scrolling for packet list
+* Add client-side filtering
+* Optimize packet formatting
+
+== Community Engagement
+
+Throughout implementation:
+
+1. **Forum Discussion** - Post design for feedback before major phases
+2. **Early Prototypes** - Share working demos to validate approach
+3. **Documentation First** - Ensure usability from day one
+4. **Incremental PRs** - Small, reviewable pull requests
+5. **Field Testing** - Beta test with real installations before declaring stable
+
+== Long-term Vision
+
+Beyond Phase 3, the analyzer infrastructure could enable:
+
+* **Automated Testing Framework** - Record expected behavior, detect regressions
+* **AI-Assisted Debugging** - Pattern recognition in protocol anomalies
+* **Performance Profiling** - Identify slow devices, optimize polling
+* **Multi-Site Analysis** - Compare protocol behavior across installations
+* **Protocol Compliance Validation** - Verify device adherence to specifications
+
+== Conclusion
+
+This roadmap provides a clear path from basic capture (Phase 1) to advanced simulation (Phase 3). Each phase delivers standalone value while building toward a comprehensive protocol analysis tool.
+
+**Immediate Focus:** Complete Phase 1 for Modbus, validate approach, gather user feedback, then evaluate Phase 2 necessity based on real-world needs.
+
+---
+
+**Document Status:** Draft
+**Last Updated:** 2025-11-22
+**Authors:** OpenEMS Community
+**Version:** 0.1
