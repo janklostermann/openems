@@ -438,7 +438,7 @@ public void testPacketCapture() {
     new ComponentTest(analyzer)
         .addReference("componentManager", componentManager)
         .activate(MyConfig.create()
-            .setId("analyzer0")
+            .setId("bridgeanalyzer0")
             .setBridgeId("modbus0")
             .setBufferSize(10)
             .build());
