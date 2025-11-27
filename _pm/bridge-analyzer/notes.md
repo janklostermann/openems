@@ -25,7 +25,7 @@ project: Bridge Analyzer
 ### Documentation
 - **Requirements:** `io.openems.edge.bridgeanalyzer.modbus/doc/requirements.adoc` - BDD-style testable requirements
 - **Implementation notes:** `io.openems.edge.bridgeanalyzer.modbus/doc/implementation-notes.adoc` - Technical decisions
-- **Integration guide:** `io.openems.edge.bridgeanalyzer.modbus/doc/integration-guide.adoc` - Usage examples
+- **Integration guide:** `io.openems.edge.bridgeanalyzer.modbus/doc/user-guide.adoc` - Usage examples
 - **Collaboration guide:** `_doc/managing-dev-assets.md` - Our dev workflow
 
 ## Key Patterns to Follow
