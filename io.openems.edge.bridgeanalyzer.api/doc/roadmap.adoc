@@ -59,7 +59,7 @@ Each phase builds upon the previous, allowing incremental delivery of value whil
 * `PacketBuffer.java` - Circular buffer implementation
 * `ModbusPacketFormatter.java` - Format packets for display
 * `readme.adoc` - Usage documentation
-* `doc/user-guide.adoc` - Usage instructions
+* `doc/integration-guide.adoc` - Integration instructions
 * `test/ModbusAnalyzerTest.java` - Unit tests
 
 ==== 1.3 Architecture Pattern

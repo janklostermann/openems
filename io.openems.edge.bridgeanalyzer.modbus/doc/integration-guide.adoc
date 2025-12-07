@@ -26,7 +26,7 @@ This guide explains how to integrate the Modbus Analyzer into your OpenEMS Edge 
    - Configuration → Factory Configurations
    - Click "BridgeAnalyzer Modbus"
    - Set:
-     * `id`: "bridgeanalyzer0" (or unique name)
+     * `id`: "analyzer0" (or unique name)
      * `bridge.id`: "modbus0" (from step 1)
      * `bufferSize`: 100
      * `captureEnabled`: true
@@ -34,7 +34,7 @@ This guide explains how to integrate the Modbus Analyzer into your OpenEMS Edge 
 
 3. **Monitor traffic** - Open OpenEMS UI:
    - Navigate to System → Analyzer
-   - Select "bridgeanalyzer0"
+   - Select "analyzer0"
    - Watch real-time packet capture
 
 4. **Analyze errors** - Look for:
@@ -47,7 +47,7 @@ This guide explains how to integrate the Modbus Analyzer into your OpenEMS Edge 
 
 6. **Disable when done** - To save resources:
    - Set `captureEnabled`: false
-   - Or delete analyzer configuration and reconnect your device directly to the bridge (e.g. "modbus0")
+   - Or delete analyzer configuration
 
 === Scenario 2: Validating New Device Implementation
 
@@ -113,7 +113,7 @@ This guide explains how to integrate the Modbus Analyzer into your OpenEMS Edge 
 
 [source,properties]
 ----
-id=bridgeanalyzer0
+id=analyzer0
 alias=Production Monitor
 enabled=true
 bridge.id=modbus0
@@ -167,7 +167,7 @@ captureEnabled=true
 
 **Method 1: OpenEMS UI Component View**
 1. Navigate to: Edge → <Your Edge> → System → Components
-2. Find "bridgeanalyzer0" in component list
+2. Find "analyzer0" in component list
 3. Click to view all channels
 
 **Method 2: Custom Analyzer View** _(if available)_
@@ -231,7 +231,7 @@ Response: 01 03 14 00 01 00 02 ... AB CD
   },
   "id": 1
 }
-// Response includes bridgeanalyzer0 component with all channels
+// Response includes analyzer0 component with all channels
 ----
 
 **Get specific channels:**
@@ -245,9 +245,9 @@ Response: 01 03 14 00 01 00 02 ... AB CD
     "fromDate": "2025-11-22T00:00:00Z",
     "toDate": "2025-11-22T23:59:59Z",
     "channels": {
-      "bridgeanalyzer0/PacketsCaptured": {},
-      "bridgeanalyzer0/ModbusErrors": {},
-      "bridgeanalyzer0/TimeoutErrors": {}
+      "analyzer0/PacketsCaptured": {},
+      "analyzer0/ModbusErrors": {},
+      "analyzer0/TimeoutErrors": {}
     }
   },
   "id": 2
@@ -263,7 +263,7 @@ Response: 01 03 14 00 01 00 02 ... AB CD
   "jsonrpc": "2.0",
   "method": "updateComponentConfig",
   "params": {
-    "componentId": "bridgeanalyzer0",
+    "componentId": "analyzer0",
     "properties": [
       {
         "name": "captureEnabled",

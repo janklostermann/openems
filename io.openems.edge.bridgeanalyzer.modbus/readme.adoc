@@ -40,7 +40,7 @@ io.openems.edge.analyzer.modbus/
 │   ├── ModbusAnalyzerImplTest.java      # Unit tests
 │   └── ModbusAnalyzerIntegrationTest.java # Integration tests
 └── doc/
-    ├── usage-guide.adoc                 # How to integrate with systems
+    ├── integration-guide.adoc           # How to integrate with systems
     └── implementation-notes.adoc        # Technical implementation details
 ```
 
@@ -82,7 +82,7 @@ The analyzer:
 | Property | Default | Description
 
 | id
-| bridgeanalyzer0
+| analyzer0
 | Unique component ID
 
 | alias
@@ -174,7 +174,7 @@ Query analyzer channels like any other component:
 {
   "method": "getChannelValues",
   "params": {
-    "componentId": "bridgeanalyzer0",
+    "componentId": "analyzer0",
     "channelIds": [
       "PACKETS_CAPTURED",
       "LAST_TRANSACTION",
@@ -293,6 +293,6 @@ Integration tests use a dummy Modbus device to validate:
 
 For detailed technical implementation information, see link:doc/implementation-notes.adoc[Implementation Notes].
 
-For integration guidance, see link:doc/user-guide.adoc[Integration Guide].
+For integration guidance, see link:doc/integration-guide.adoc[Integration Guide].
 
 https://github.com/OpenEMS/openems/tree/develop/io.openems.edge.analyzer.modbus[Source Code icon:github[]]
