@@ -1,0 +1,63 @@
+= ABL eMH1 EVSE Charge-Point
+
+Implementation of the ABL eMH1 series electric vehicle charging station driver for OpenEMS.
+
+Communication: Modbus/ASCII over RS-485 serial.
+The device uses `>` instead of `:` as the frame-start character when responding — requires
+`BridgeModbusSerialAscii` with ABL compatibility mode enabled (`ablCompatible = true`).
+
+== Compatibility
+
+* ABL eMH1 1P 3.7kW (socket)
+* ABL eMH1 1P 7.4kW (socket)
+* ABL eMH1 1P 7.4kW (cable)
+* ABL eMH1 3P 11kW (socket)
+* ABL eMH1 3P 11kW (cable)
+* ABL eMH1 3P 22kW (socket)
+* ABL eMH1 3P 22kW (cable)
+* ABL eMH1 1P 36kW (cable)
+
+== Implemented Natures
+
+* EVSE Charge-Point (`EvseChargePoint`) — setpoint control, EV connection and ready-for-charging state
+* Electricity Meter (`ElectricityMeter`) — phase currents, calculated active power, lifetime energy
+
+== Configuration
+
+[cols="1,1,3"]
+|===
+|Parameter|Default|Description
+
+|Component-ID|evseChargePoint0|Unique component identifier
+|Hardware Type|EMH1_3P_22KW_CABLE|ABL eMH1 product variant — determines phase count and maximum current
+|Phase Rotation|L1_L2_L3|Apply standard or rotated phase wiring
+|Fallback Voltage L1/L2/L3|230 V|Phase voltage used when no live voltage channel is configured
+|Voltage L1/L2/L3 Channel Address|(empty)|Optional channel address for live phase voltage (e.g. `meter0/VoltageL1`)
+|Enable Upstream Timeout|true|Writes 0x9001 to register 0x002C on startup (recommended)
+|Read Only|false|Set true to prevent any write commands (monitoring only)
+|Modbus Unit-ID|1|Modbus address of the device (typically 1 for single-outlet setup)
+|Log Verbosity|NONE|Diagnostic logging level
+|===
+
+== Notes on Metering
+
+`ACTIVE_CONSUMPTION_ENERGY` is *not* read from the device (the ABL eMH1 does not expose
+an energy register). It is calculated by OpenEMS from `ACTIVE_POWER × elapsed time`,
+seeded from the Timedata service on startup so the lifetime total survives restarts.
+
+`SESSION_ENERGY` is similarly calculated in software and resets to zero at the start of
+each new charging session. It is not persisted across OpenEMS restarts.
+
+`VOLTAGE_L1/L2/L3` are *not* measured by the device. They are taken from a configured
+external meter channel, or from the fixed fallback voltage value configured per phase
+(default: 230 V).
+
+== Behaviour Specification
+
+See link:doc/behaviour-goals.adoc[doc/behaviour-goals.adoc] for the full goal list.
+
+== Tested with
+
+ABL eMH1 wallbox 1W2201 with firmware version xxx.
+
+https://github.com/OpenEMS/openems/tree/develop/io.openems.edge.evse.chargepoint.abl[Source Code icon:github[]]

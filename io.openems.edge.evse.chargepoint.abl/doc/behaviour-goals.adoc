@@ -1,0 +1,619 @@
+= ABL eMH1 — Behaviour Goals for BDD/TDD development approach
+:toc:
+:toc-placement: preamble
+
+Agreed behaviour specification for `io.openems.edge.evse.chargepoint.abl`.
+Written in Phase 2 of the TDD wizard; referenced by test class Javadoc.
+
+Status legend: *CONFIRMED* — agreed, drives test contract. *HYPOTHESIS* — expected to work, requires hardware validation.
+
+---
+
+== G0a  HARDWARE MODEL SELECTION  [CONFIRMED]
+
+*Given:* Component is configured with a hardware type selected from `AblEMh1HardwareType` enum. +
+*When:* Component activates. +
+*Then:*
+
+* `MINIMUM_HARDWARE_POWER` and `MAXIMUM_HARDWARE_POWER` are derived from enum values via
+  `addCalculatePowerLimitListeners()` (auto-recalculates from `phases` × `maxCurrentInAmpere` × voltage).
+* `ChargePointAbilities` declares the correct `Ability.Ampere(6, maxCurrentInAmpere)` range.
+* UI shows the selected model label and rated power.
+* `Config.java` has a single `hardwareType()` field; the implementation derives all parameters
+  from it — no raw number fields that can be set inconsistently.
+
+*Enum — all ABL eMH1 Product numbers:*
+
+[cols="2,2,1,1,1,2"]
+|===
+| Enum constant | Product number | Phases | Max A | kW | Connection type
+
+| `EMH1_1P_36KW_CABLE`     | 1W36P1                    | 1 | 16 |  3.6 | Ladekabel Typ 2
+| `EMH1_1P_72KW_SOCKET`    | 1W7221 / 1W72P2           | 1 | 32 |  7.2 | Ladesteckdose Typ 2
+| `EMH1_1P_72KW_CABLE`     | 1W7201 / 1W72P1           | 1 | 32 |  7.2 | Ladekabel Typ 2
+| `EMH1_1P_72KW_CABLE_T1`  | 1W7241                    | 1 | 32 |  7.2 | Ladekabel Typ 1
+| `EMH1_3P_11KW_SOCKET`    | 1W1121 / 1W11K2 / 1W11N2 | 3 | 16 | 11   | Ladesteckdose Typ 2
+| `EMH1_3P_11KW_CABLE`     | 1W1101 / 1W11K1 / 1W11N1 | 3 | 16 | 11   | Ladekabel Typ 2
+| `EMH1_3P_22KW_SOCKET`    | 1W2221                    | 3 | 32 | 22   | Ladesteckdose Typ 2
+| `EMH1_3P_22KW_CABLE`     | 1W2201                    | 3 | 32 | 22   | Ladekabel Typ 2
+|===
+
+UI dropdown label format: `"1W2201 — 22 kW, 3-phase, 32 A, Typ-2-Kabel"`. +
+All product numbers per _Technische Daten_ (ABL_eMH1_MA_RZ_05_D-web.pdf, pp. 81–84).
+
+---
+
+== G0b  CONFIGURATION — VOLTAGE SOURCE  [CONFIRMED]
+
+*Given:* Component is being configured. +
+*When:* The operator sets up the component. +
+*Then:*
+
+* Config has two fields per phase (L1, L2, L3):
+** `fallbackVoltageL1` / `fallbackVoltageL2` / `fallbackVoltageL3` (integer, default: 230) —
+   fallback voltage in V, always visible, always effective when no channel is available or
+   the channel goes silent.
+** `voltageL1ChannelAddress` / `voltageL2ChannelAddress` / `voltageL3ChannelAddress`
+   (string, default: empty) — optional channel address to read live voltage from an external
+   meter (e.g. `"meter0/VoltageL1"`).
+* Each cycle, per phase: if the channel address is non-empty and the channel value is available,
+  use it; otherwise use the configured fallback value and log a warning if the channel was
+  expected but unavailable.
+* `VOLTAGE_L1/L2/L3` channels are set from the resolved values each cycle.
+* Channel description: _"Phase voltage — not measured by this device. Read from configured
+  channel address if available, otherwise use fallback value (fallbackVoltageL1/L2/L3)."_
+* Resolved values feed G1 (power calculation) and G3b (energy metering).
+* Scheduling note: channel reads return the previous cycle's value (normal OpenEMS pattern);
+  no OSGi hard dependency on the source meter component is created.
+
+---
+
+== G1  MONITORING — PHASE CURRENTS AND CALCULATED ACTIVE POWER  [CONFIRMED]
+
+*Primary polling register:* R5 (`0x002E`) — provides 0.1 A resolution for Ict1/Ict2/Ict3
+and includes the EVSE state byte; one R5 poll per cycle covers both G1 and G2. +
+Register R3 (`0x0033`) is an alternative lower-overhead poll (1 A resolution, 3 registers
+instead of 5).
+
+*Register layout — R5 (`0x002E`–`0x0032`, 5 registers, 10 bytes):*
+
+[cols="1,2,3"]
+|===
+| Register | Bits [15:0] | Content
+
+| `0x002E` | [15:8] = 0x2E (reference); [7:0] = EVSE state byte +
+             (value = state code directly: A1→0xA1, B2→0xB2, C2→0xC2, F4→0xF4, …) | Reference + state
+| `0x002F` | bit15 = U_CP ≤ 10 V (EV connected); bit14 = duty cycle reduced by BC3–BC6; +
+             bit13 = EN2 closed; bit12 = EN1 closed; +
+             bits[11:0] = applied I_c duty cycle [%]×10 (0…1000) | Flags + duty cycle
+| `0x0030` | I_ct1 [0.1 A], 0x0000–0x0320 (0–80.0 A); 0x03E8 = unavailable or state A | Phase 1 current
+| `0x0031` | I_ct2 [0.1 A] (same encoding) | Phase 2 current
+| `0x0032` | I_ct3 [0.1 A] (same encoding) | Phase 3 current
+|===
+
+_Example from spec (device in C3, I_cmax=16 A, L1/L2=10 A, L3=0 A):_ +
+Request `:0103002E0005C9`, response `>01030A 2EC3 810A 0064 0064 0000 [LRC] CRLF` +
+→ state=0xC3, duty-cycle=0x10A=266→26.6 %→16 A, I_ct1=0x0064=10.0 A, I_ct2=10.0 A, I_ct3=0 A.
+
+*Register layout — R3 (`0x0033`–`0x0035`, 3 registers, 6 bytes):*
+
+[cols="1,2,3"]
+|===
+| Register | Bits [15:0] | Content
+
+| `0x0033` | [15:8] = 0x33 (reference); bit7 = U_CP ≤ 10 V; bits[6:0] = 0x00 | Reference + U_CP flag
+| `0x0034` | [15:8] = EVSE state byte; [7:0] = I_ct1 [A], 0x00–0x50 (0–80 A); 0x64 = unavailable or state A | State + phase 1 current
+| `0x0035` | [15:8] = I_ct2 [A]; [7:0] = I_ct3 [A] (same encoding) | Phase 2 + 3 current
+|===
+
+_Example from spec (device in A1, no EV):_ +
+Request `:010300330003C6`, response `>010306 3300 A164 6464 F6 CRLF` +
+→ U_CP=0 (no EV), state=0xA1 (A1), I_ct1/2/3=0x64 (unavailable).
+
+*Given:* EV is charging at 16 A on three phases (22 kW model). +
+*When:* OpenEMS reads currents from register R5 / `0x002E`. +
+*Then:*
+
+* `CURRENT_L1`, `CURRENT_L2`, `CURRENT_L3` ≈ 16,000 mA each.
+* `ACTIVE_POWER` = Σ(CURRENT_Lx × VOLTAGE_Lx) ≈ 11,040 W (= 3 × 16 A × 230 V per G0b default).
+* For 1-phase models: `CURRENT_L2` = `CURRENT_L3` = 0;
+  `ACTIVE_POWER` = 1 × CURRENT_L1 × VOLTAGE_L1.
+
+*Given:* `hardwareType = EMH1_1P_72KW_CABLE` (1-phase, 32 A). +
+*When:* Current is 20 A. +
+*Then:*
+
+* `ACTIVE_POWER` ≈ 4,600 W (= 1 × 20 A × 230 V); not 13,800 W as it would be if assumed 3-phase.
+
+---
+
+== G2  MONITORING — CHARGING STATE  [CONFIRMED]
+
+*Given:* State register reads C2 ("charging, ventilation not required"). +
+*Then:* `isEvConnected = true`; `isReadyForCharging = true`.
+
+*Given:* State register reads C3 ("charging, current reduced due to error F16/F17") or
+C4 ("charging, current reduced due to load imbalance F15"). +
+*Then:* `isEvConnected = true`; `isReadyForCharging = true` (charging ongoing at reduced current).
+
+*Given:* State register reads B1 (EV connected, permission not yet granted). +
+*Then:* `isEvConnected = true`; `isReadyForCharging = false`.
+
+*Given:* State register reads B2 (EV has permission, not yet drawing current). +
+*Then:* `isEvConnected = true`; `isReadyForCharging = true`.
+
+*Given:* State register reads A1 (no EV connected). +
+*Then:* `isEvConnected = false`.
+
+*Given:* State register reads E0 (outlet disabled), E1 (production test), E2 (EVCC setup
+mode — outlet enabled but no EV connected), or E3 (bus idle). +
+*Then:* `isEvConnected = false`.
+
+*Given:* State register reads any F-state (F1–F11; fault). +
+*Then:* `isEvConnected = false`; `FAULT_STATE` channel set (see G7).
+
+*State byte encoding:* The state byte value in registers R5 (`0x002E` low byte) and R3
+(`0x0034` high byte) directly encodes the state name — A1→0xA1, B2→0xB2, C2→0xC2,
+E2→0xE2, F4→0xF4, etc.
+
+---
+
+== ABL eMH1 Device State Machine
+
+_Rendered with `asciidoctor-diagram` + PlantUML. Without the gem the block shows as source text._
+
+[plantuml, abl-device-state-machine, svg]
+....
+@startuml
+hide empty description
+skinparam defaultFontSize 11
+skinparam StateBorderColor #555555
+skinparam StateBackgroundColor #FAFAFA
+
+state E0 : Outlet disabled
+state E2 : Outlet enabled\n(EVCC setup mode)
+state A1 : Waiting for EV
+
+state "EV Session" as EVS {
+  state B1 : EV requesting charge
+  state B2 : Permission granted\n(I = 0)
+  state C2 : Charging (I > 0)
+  state C3 : Charging — reduced\n(error, sub-code F16/F17)
+  state C4 : Charging — reduced\n(imbalance, sub-code F15)
+
+  [*] --> B1
+  B1 --> B2 : B1→B2 enabled\n(auto or explicit enable)
+  B2 --> C2 : EV draws current
+  C2 --> B2 : current drops to 0
+  C2 --> C3 : overcurrent error
+  C2 --> C4 : load imbalance
+  C3 --> C2 : condition resolved
+  C4 --> C2 : condition resolved
+}
+
+state "Fault" as FAULT
+
+[*] --> E0
+
+E0 --> E2 : write 0xE2E2\n[precond: A1 or E0]
+E2 --> A1 : auto (no EV)
+E2 --> E0 : write 0xE0E0
+A1 --> E0 : write 0xE0E0
+E0 --> A1 : write 0xA1A1\n[precond: E0 or E2]
+A1 --> EVS : EV connects\n[A1→B1 enabled]
+EVS --> A1 : EV disconnects
+EVS --> E0 : write 0xE0E0\n(ends session)
+A1 --> FAULT : fault condition
+EVS --> FAULT : fault condition
+FAULT --> E0 : write 0xE0E0\nor device reset
+
+note right of FAULT
+  F1  Welding detection tripped
+  F2  Internal error
+  F3  DC residual current (RDC-MD)
+  F4  Upstream communication timeout
+  F5  Socket lock failed
+  F6  CS (cable signal) out of range
+  F7  State D (ventilation) requested
+  F8  CP (control pilot) out of range
+  F9  Overcurrent detected
+  F10 Temperature outside limits
+  F11 Unintended opened contact
+  ——
+  All Fx: isEvConnected = false
+end note
+
+note left of EVS
+  B1→B2 auto-transition is a
+  persistent setting configured
+  via reg 0x002C; takes effect
+  after the next power-cycle.
+end note
+@enduml
+....
+
+_States E1 (production test) and E3 (bus idle) are not shown; they are not reachable in
+normal field operation._
+
+---
+
+== G3a  CALCULATED CHANNELS — PER-SESSION ENERGY  [CONFIRMED]
+
+*Given:* The previous device state was disconnected (A1, E0, E2, or any F-state) AND the
+new state is B1, B2, or C2. +
+*When:* The state transition is detected. +
+*Then:*
+
+* `SESSION_ENERGY` [Wh] is reset to 0.
+
+*Counter-example:* A transition C2 → C3 → C2 (momentary reduced-current dip within an
+active session) does NOT reset `SESSION_ENERGY`.
+
+*Given:* EV is charging; `ACTIVE_POWER` > 0. +
+*When:* Each OpenEMS cycle fires. +
+*Then:*
+
+* `SESSION_ENERGY` is incremented by `(ACTIVE_POWER × elapsed_time)`.
+
+*Given:* Session ends (state transitions to A1, E0, E2, or any F-state). +
+*When:* The state transition is detected. +
+*Then:*
+
+* `SESSION_ENERGY` retains its final value until the next session starts (readable after
+  the session ends).
+
+*Implementation note:* Simple in-memory accumulator; no Timedata seeding needed
+(intentionally resets on restart — a partial session value after a restart would be misleading).
+
+---
+
+== G3b  CALCULATED CHANNELS — LIFETIME CONSUMPTION ENERGY  [CONFIRMED]
+
+*Given:* EV is charging; `ACTIVE_POWER` > 0; component implements `TimedataProvider`. +
+*When:* Each OpenEMS cycle fires (EVENT_CYCLE_AFTER_PROCESS_IMAGE). +
+*Then:*
+
+* `ACTIVE_CONSUMPTION_ENERGY` [Wh_Σ] is incremented by `(ACTIVE_POWER × elapsed_time)`.
+* On component start, the last stored value is read back from Timedata (survives restarts).
+* The counter is monotonically increasing (lifetime total).
+
+*Implementation:* `CalculateEnergyFromPower calculateEnergy = new CalculateEnergyFromPower(this,
+ElectricityMeter.ChannelId.ACTIVE_CONSUMPTION_ENERGY)` — call `calculateEnergy.update(activePower)`
+each cycle. Requires `@Reference(optional) Timedata timedata` and `implements TimedataProvider`.
+
+---
+
+== G4a  CONTROL — ENABLE OUTLET AT STARTUP  [HYPOTHESIS]
+
+*Given:* `readOnly = false`. +
+*When:* Component activates (`@Activate` / `@Modified`). +
+*Then:* startup sequence per diagram below.
+
+[plantuml, abl-openems-startup, svg]
+....
+@startuml
+skinparam defaultFontSize 11
+skinparam ActivityBackgroundColor #FAFAFA
+skinparam ActivityBorderColor #555555
+skinparam ArrowColor #333333
+
+start
+:Component @Activate / @Modified;
+
+if (readOnly = true?) then (yes)
+  :Poll-only mode — no writes scheduled;
+  stop
+else (no)
+endif
+
+:Read device state via R5 (reg 0x002E);
+
+if (state ∈ {A1, E0}?) then (yes)
+  :Write **0xE2E2** → reg 0x0005
+  (outlet enabled → state E2);
+  if (enableUpstreamTimeout = true?) then (yes)
+    :Write **0x9001** → reg 0x002C
+  (timeout enabled + auto B1→B2 + device ID 1)
+  //Precondition: device must be in E2//;
+  else (no)
+  endif
+else (no)
+  note right
+    State is E2, B1, B2, C2, or C3/C4 —
+    EV may be connected or charging.
+    Skip 0xE2E2 (precondition not met).
+  end note
+  if (state = E2 AND enableUpstreamTimeout = true?) then (yes)
+    :Write **0x9001** → reg 0x002C;
+  else (no)
+  endif
+endif
+
+:Schedule periodic R5 poll (every cycle);
+stop
+@enduml
+....
+
+*Hypothesis:* E0 → E2 re-enables correctly without a hardware reset — verify on hardware.
+See open question U6 for the restart-while-charging edge case.
+
+---
+
+== G4b  CONTROL — HARD OUTLET ENABLE / DISABLE  [HYPOTHESIS]
+
+*Given:* `readOnly = false`; device is active. +
+*When:* `OUTLET_ENABLED` write-channel is set to `false`. +
+*Then:*
+
+* Register `0x0005` is written via FC10 with value `0xE0E0` (state E0 = outlet physically
+  disabled, session ends).
+
+*When:* `OUTLET_ENABLED` is set to `true`. +
+*Then:*
+
+* Register `0x0005` is written via FC10 with value `0xE2E2` (state E2 = outlet re-enabled).
+
+*Channel spec:*
+
+* Type: `BooleanWriteChannel OUTLET_ENABLED` — compatible with `Controller.IO.ChannelSingleThreshold`
+  which writes `WriteChannel<Boolean>`.
+* Visible in UI.
+
+*Semantic distinction from G6:* G6 (setpoint=0) is a soft current limit — EV stays connected,
+session active, cable locked. G4b (`false`) is a hard hardware disable — session ends, outlet off.
+
+*Hypothesis:* E0 → E2 transition re-enables correctly without a hardware reset. Verify on hardware.
+
+---
+
+== G5  CONTROL — SET CHARGE CURRENT LIMIT  [CONFIRMED]
+
+*Given:* `readOnly = false`; device in state B2 or C2; hardware type known. +
+*When:* OpenEMS applies a setpoint of X amperes (e.g. 16 A). +
+*Then:*
+
+* Register `0x0014` is written via FC10 with value `round(X / 0.6 * 10)`.
+  Example: 16 A → 267; 32 A → 533.
+* OpenEMS write range: minimum `0x0064` (= 100 = 10 % duty cycle = 6 A per IEC 61851)
+  up to the value for `hardwareType.maxCurrentInAmpere()`. +
+  Device hardware accepts 0x0050–0x03E8 (8 %–100 %); `0x03E8` is the soft-pause sentinel (G6).
+  Do not write below 0x0064 from OpenEMS (that would be below the IEC 6 A minimum).
+* Declared ability: `Ability.Ampere(6, hardwareType.maxCurrentInAmpere())`.
+
+---
+
+== G6  CONTROL — SOFT PAUSE (100 % duty cycle)  [HYPOTHESIS]
+
+*Given:* `readOnly = false`; EV is connected and device is charging. +
+*When:* OpenEMS applies setpoint = 0. +
+*Then:*
+
+* Register `0x0014` is written with value `0x03E8` (= 100 % = "no current allowed").
+* Device stops drawing current.
+* EV stays connected; device remains in B2/C2 state (cable does not unlock).
+
+*Hypothesis:* ABL eMH1 honours `0x03E8` as a pause signal — verify on hardware. +
+*Fallback:* G4b (hard disable via `0xE0E0` to `0x0005`).
+
+---
+
+== G7  FAULT REPORTING — F-STATES  [CONFIRMED]
+
+*Given:* Device reports a fault state in the state byte. +
+*When:* OpenEMS reads register R3 / `0x0033`. +
+*Then:*
+
+* `FAULT_STATE` channel is set to the corresponding `AblEMh1FaultState` enum value.
+* A warning is logged: `"ABL eMH1 FAULT: <state-name>"`.
+* `isEvConnected = false`; `isReadyForCharging = false`.
+
+*`AblEMh1FaultState` enum — complete state list (spec §3.4 "Definition of states"):*
+
+[cols="1,3"]
+|===
+| State | Meaning
+
+| F1  | Unintended closed contact (welding detection tripped)
+| F2  | Internal error
+| F3  | DC residual current detected (RDC-MD tripped)
+| F4  | Upstream communication timeout (OpenEMS / SBC lost)
+| F5  | Lock of socket failed
+| F6  | CS (Cable Signal) out of range
+| F7  | State D requested by EV (ventilation required — not supported by eMH1)
+| F8  | CP (Control Pilot) out of range
+| F9  | Overcurrent detected
+| F10 | Temperature outside limits
+| F11 | Unintended opened contact
+|===
+
+*Notes:*
+
+* F4 vs F14: system flags register `0x0006` bit 15 controls which fault code the upstream
+  timeout raises (bit=0 → F14, bit=1 → F4). Both are upstream timeout; the difference is
+  legacy firmware behaviour configurable via `0x002C` bits[15:14]. OpenEMS treats both identically.
+* F15/F16/F17 appear in C4/C3 state descriptions ("C4: imbalance F15", "C3: error F16/F17")
+  as sub-fault codes that cause current reduction within those states; they are not independent
+  device states reachable from the state machine.
+* State F7 means the EV is requesting IEC 61851 State D (ventilation) which the eMH1 does
+  not support; charging stops and this fault is raised.
+
+---
+
+== G8  RESILIENCE — COMMUNICATION FAILURE  [CONFIRMED]
+
+*Given:* Modbus read or write fails (timeout / framing error) or the serial connection is lost. +
+*When:* The FC3 / FC10 task returns an error. +
+*Then:*
+
+* `COMMUNICATION_FAILED` channel becomes active (Level WARNING).
+* If `enableUpstreamTimeout = true`: hardware upstream timeout eventually trips F4 (safety net).
+
+---
+
+== G9  SAFETY — UPSTREAM TIMEOUT (configurable)  [HYPOTHESIS]
+
+*Given:* `enableUpstreamTimeout = true` (Config, default: true); `readOnly = false`. +
+*When:* Component activates or is reconfigured. +
+*Then:*
+
+* Register `0x002C` is written to enable the upstream timeout mode and configure B1→B2
+  auto-transition (see G12). *Precondition: outlet must be in state E2* (spec requirement).
+* If OpenEMS stops communicating, the device raises F4/F14 and stops charging (hardware behaviour).
+
+*Register `0x002C` bit layout (spec §2, "0x002C – Set device-ID"):*
+
+[cols="1,1,3"]
+|===
+| Bits | Value | Effect
+
+| [15:14] | 00 or 11 | No change to timeout setting
+| [15:14] | 01       | Upstream-Timeout and fault F4 *disabled*
+| [15:14] | 10       | Upstream-Timeout and fault F4 *enabled* ← use this
+| [13:12] | 00 or 11 | No change to B1→B2 setting
+| [13:12] | 01       | Auto B1→B2 after power-cycle if EV connected ← use this (see G12)
+| [13:12] | 10       | B1→B2 requires explicit enable after power-cycle (stay in B1)
+| [11:8]  | 0000     | Reserved — must be 0
+| [7:0]   | 0x01–0x10 | Device-ID (keep at 0x01 for standard single-outlet setup)
+|===
+
+*Write value for default OpenEMS setup* (timeout enabled + auto B1→B2 + device ID 1): +
+bits[15:14]=10, bits[13:12]=01, bits[11:0]=0x001 → `0x9001`.
+
+*Given:* `enableUpstreamTimeout = false`. +
+*When:* Component activates. +
+*Then:*
+
+* No write to register `0x002C`; device uses its own built-in default behaviour (may not
+  have upstream timeout enabled, and B1→B2 auto-transition depends on factory config).
+
+*Note on keepalive (open question U4):* The spec communication patterns show only regular
+FC3 reads without any periodic keepalive write to `0x0005`. This implies any Modbus
+transaction (including reads) resets the upstream timeout counter. If hardware testing
+shows reads do not reset the counter, a periodic `0xE2E2` write to `0x0005` must be added.
+
+---
+
+== G10  SAFETY — READ-ONLY SETTING BLOCKS WRITES  [CONFIRMED]
+
+*Given:* `readOnly = true`. +
+*When:* Any write command is issued (setpoint, outlet enable, timeout config). +
+*Then:*
+
+* No FC10 write reaches the device (registers `0x0014`, `0x0005`, `0x002C` all skipped silently).
+* Device state is unchanged.
+* If `logVerbosity ≥ READS_AND_WRITES_VERBOSE`: log entry gets prefix "BLOCKED BY READ-ONLY:"
+  (see G11).
+
+---
+
+== G11  DIAGNOSTIC — DEBUG WRITE FRAME LOG  [CONFIRMED]
+
+*Given:* `logVerbosity ≥ READS_AND_WRITES_VERBOSE`. +
+*When:* A write operation is about to be sent to the device. +
+*Then:*
+
+* Logs at INFO: `"DEBUG WRITE: <ascii-frame>"` where `<ascii-frame>` is the reconstructed
+  Modbus ASCII frame in `:UUFFDDDDDDLL\r\n` format (following
+  `BridgeModbusTesterImpl.rebuildAsciiRequestFrame()`).
+
+*Given:* `readOnly = true` AND `logVerbosity ≥ READS_AND_WRITES_VERBOSE`. +
+*When:* A write is blocked. +
+*Then:*
+
+* Logs at INFO: `"BLOCKED BY READ-ONLY: DEBUG WRITE: <ascii-frame>"`.
+* No write is sent; device state unchanged.
+
+*Implementation note:* Shares `buildAsciiWriteFrameString(unitId, register, value)` helper with G10.
+
+---
+
+== G12  CONFIGURATION — B1→B2 AUTO-TRANSITION  [CONFIRMED]
+
+*Given:* Component activates; `readOnly = false`. +
+*When:* Register `0x002C` is written (together with upstream timeout config per G9). +
+*Then:*
+
+* Register `0x002C` bits[13:12] = `01` is written as part of the G9 write (value `0x9001`
+  for device ID 1). This configures the device to automatically transition B1→B2 after
+  power-cycle when an EV is connected, so no separate OpenEMS command is required to
+  grant charge permission.
+* *This setting is persistent across power cycles* — it takes effect at the next power-on.
+  At runtime the current B1→B2 status is visible in system flags `0x0007` bit 4
+  (0 = B1→B2 enabled, 1 = disabled).
+
+*Given:* `readOnly = true` or `enableUpstreamTimeout = false` (and `0x002C` is not written). +
+*When:* An EV connects (state B1). +
+*Then:*
+
+* Behaviour depends on factory config or last persistent `0x002C` write. If the device has
+  never received a `0x002C` write, it may stay in B1 indefinitely and charging will not start.
+  In `readOnly = true` mode this is acceptable (monitoring only); without `readOnly`, warn in log.
+
+---
+
+== G13  MONITORING — SYSTEM FLAGS  [CONFIRMED]
+
+*Given:* Component is running. +
+*When:* OpenEMS reads system flags registers `0x0006`–`0x0007` each cycle. +
+*Then:*
+
+* Register `0x0006`: [15:8] = 0x06 (reference); [7:0] = current EVSE state byte
+  (same encoding as R5/R3 — useful for state cross-check without a full R5 read).
+* Register `0x0007`: flag bits per table below.
+
+*Register `0x0007` flag bits (spec §2, "0x0006 – Read system-flags"):*
+
+[cols="1,3,3"]
+|===
+| Bit | Value 0 | Value 1
+
+| 15     | Upstream-Timeout → F14         | Upstream-Timeout → F4
+| 14     | B1→B2 enabled after power-cycle | B1→B2 disabled after power-cycle
+| [13:12]| 00 = default CP/timing limits  | 10 = China limits for CP detection and timing
+| [11:10]| reserved                        | reserved
+| 9      | Upstream comm established       | *Upstream comm lost* (BC6) → log warning; may trigger F4/F14
+| 8      | No load imbalance               | *Load imbalance detected* (BC3) → log warning
+| 7      | Temperature ≤ 60 °C             | *Temperature 60 °C < T < 80 °C* (BC5) → log warning
+| 6      | Phase current metering OK       | *Phase current metering failed* (BC4) → log warning; treat R3/R5 current readings as unreliable
+| 5      | E0→A1 enabled                   | E0→A1 disabled
+| 4      | B1→B2 enabled (runtime)         | B1→B2 disabled (runtime)
+| 3      | A1→B1 enabled                   | A1→B1 disabled
+| [2:0]  | 000 = EV current ≤ 100 % I_c (normal) | 001=100–105 %; 101=105–110 %; 011=110–120 %; 111 > 120 %
+|===
+
+OpenEMS channel/log mapping: bit9=1 → `UPSTREAM_COMM_LOST` + log warning;
+bit8=1 → `LOAD_IMBALANCE` + log warning; bit7=1 → `TEMPERATURE_WARNING` + log warning;
+bit6=1 → `PHASE_METERING_FAILED` + log warning.
+
+---
+
+== Integration Tests with Hardware
+
+I2  MONITORING — EV CONNECTED
+
+*Given:* EV cable is plugged in (state = B1/B2/C2). +
+*When:* OpenEMS reads the device. +
+*Then:* `isEvConnected = true`.
+
+*Given:* No cable plugged in (state = A1). +
+*When:* OpenEMS reads the device. +
+*Then:* `isEvConnected = false`.
+
+---
+
+== Open Questions
+
+[cols="1,3"]
+|===
+| ID | Question
+
+| U4  | Does the upstream timeout counter reset on any Modbus traffic (including FC3 reads),
+        or only on writes to `0x0005`? Spec communication examples show only reads without
+        any keepalive write, implying reads suffice — but requires hardware validation.
+        If reads do not reset the counter, add a periodic `0xE2E2` write as keepalive.
+| U6  | Safe startup sequence for `0x0005` write: spec precondition for `0xE2E2` is
+        "A1 or E0 required". If the component restarts while the device is in B2/C2
+        (EV actively charging), writing `0xE2E2` will fail. Proposed strategy: read state
+        first via R5; only write `0xE2E2` if current state is A1 or E0; otherwise skip and
+        continue from current state. Verify on hardware.
+|===

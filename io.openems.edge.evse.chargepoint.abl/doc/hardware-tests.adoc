@@ -1,0 +1,875 @@
+= ABL eMH1 — Hardware Validation Test Suite
+:toc:
+:toc-placement: preamble
+
+Hardware test procedures for `io.openems.edge.evse.chargepoint.abl`.
+These tests validate behaviour that cannot be covered by unit tests alone — they require a
+physical ABL eMH1 device connected via RS-485/Modbus-ASCII.
+
+Status legend: *PASS* — observed to work. *FAIL* — bug found. *OPEN* — not yet run. *SKIP* — not applicable to this hardware variant.
+
+---
+
+== Prerequisites
+
+=== Required Hardware
+
+* ABL eMH1 wallbox (any supported product variant — see test notes per case)
+* RS-485 USB adapter connected to the eMH1 RS-485 terminals
+* EV or CP/PP load simulator (a 1 kΩ resistor between CP and PE simulates an EV connected but not drawing current (IEC 61851 State B); close switch via 270 Ω to simulate draw State C)
+* Multimeter or clamp meter (for fault-injection scenarios)
+* Laptop running OpenEMS edge with `evseChargePoint0` using this driver
+
+=== Software Setup
+
+. Build and deploy `io.openems.edge.evse.chargepoint.abl` and the ASCII bridge bundle.
+. Configure the component:
++
+[source]
+----
+id = evseChargePoint0
+modbus_id = modbus0 (BridgeModbusSerialAscii, ablCompatible = true)
+modbusUnitId = 1
+hardwareType = <match your physical unit>
+fallbackVoltageL1/L2/L3 = 230
+enableUpstreamTimeout = true     (default)
+readOnly = false                  (for write tests — set true for H01d)
+logVerbosity = READS_AND_WRITES_VERBOSE
+----
+. Open OpenEMS REST/JSON API or CLI debug view to observe channel values in real time.
+. If you have a Modbus packet sniffer (e.g. `modpoll`, Wireshark on the USB serial adapter), use it to capture raw frames independently. The bridge logs every ASCII frame when `logVerbosity = READS_AND_WRITES_VERBOSE`.
+
+=== Notation
+
+* *Reg `0xABCD`* — Modbus holding register at that address (decimal equivalent noted where helpful).
+* *FC3* — Read Holding Registers.
+* *FC10 / FC16* — Write Multiple Registers (ABL eMH1 requires FC16; FC6 produces corrupt frames).
+* *Frame shown as:* `:UUFFAAAALLDDRR[LRC]CRLF` or `>01...` (ABL response, `>` replaces `:` — handled transparently by the bridge).
+* *Channel* refers to an OpenEMS channel on component `evseChargePoint0`.
+
+---
+
+== H01  STARTUP OUTLET ENABLE  (behaviour goal G4a — HYPOTHESIS)
+
+_Validates: on activation, the driver writes `0xE2E2` to reg `0x0005` when device is in A1 or E0, enabling the outlet._
+
+=== H01a — Normal startup from A1 (no EV)
+
+*Precondition:* No EV cable connected; device in state A1; outlet previously enabled.
+
+*Steps:*
+
+. Confirm `EVSE_STATE = A1` via channel read.
+. Restart the OpenEMS component (`@Modified` trigger: disable + re-enable component in UI, or restart the bundle).
+. Watch the serial log for the write frame to reg `0x0005`.
+. Read `EVSE_STATE` channel one cycle after restart.
+
+*Expected:*
+
+* Log contains: `DEBUG WRITE: :0110000500010202E2E2[LRC]` (FC16, reg `0x0005`, value `0xE2E2`) immediately after startup.
+* `EVSE_STATE` progresses: E0 → E2 → A1 within two cycles.
+
+*Record:* [ ] PASS / [ ] FAIL / [ ] OPEN +
+Notes: ______________
+
+---
+
+=== H01b — Startup from E0 (outlet explicitly disabled)
+
+*Precondition:* Issue `OUTLET_ENABLED = false` to put device in E0. Confirm `EVSE_STATE = E0`. Then restart component.
+
+*Steps and expected:* Same as H01a — write `0xE2E2` must fire; device must return to E2 / A1 without a physical hardware reset.
+
+*Record:* [ ] PASS / [ ] FAIL / [ ] OPEN +
+Notes: ______________
+
+---
+
+=== H01c — Startup with EV already connected (state B2 / C2) — open question U6
+
+*Precondition:* EV connected and charging (state C2 or B2).
+
+*Steps:*
+
+. Confirm `EVSE_STATE ∈ {B2, C2}`.
+. Restart OpenEMS component.
+. Observe log and channel: the write to `0x0005` must *not* fire (precondition not met).
+. Confirm charging continues uninterrupted; `ACTIVE_POWER` does not dip.
+
+*Expected:*
+
+* No `DEBUG WRITE: :01100005...` appears in the restart log.
+* `EVSE_STATE` stays in B2 or C2 through restart.
+* Session energy counter resets to 0 (expected — in-memory, not persisted).
+
+*Resolves open question U6.*
+
+*Record:* [ ] PASS / [ ] FAIL / [ ] OPEN +
+Notes: ______________
+
+---
+
+=== H01d — readOnly = true: no startup write
+
+*Precondition:* Reconfigure component with `readOnly = true`; device in A1.
+
+*Steps:* Restart component. Watch log.
+
+*Expected:* No `DEBUG WRITE` frame for reg `0x0005`; `EVSE_STATE` remains A1; no outlet state change.
+
+*Record:* [ ] PASS / [ ] FAIL / [ ] OPEN +
+Notes: ______________
+
+---
+
+== H02  HARD OUTLET ENABLE / DISABLE  (behaviour goal G4b — HYPOTHESIS)
+
+_Validates: writing `OUTLET_ENABLED` channel propagates to reg `0x0005` and the device responds correctly._
+
+=== H02a — Disable outlet (E0)
+
+*Precondition:* Device in A1 (no EV); `readOnly = false`.
+
+*Steps:*
+
+. Write `OUTLET_ENABLED = false` via OpenEMS API.
+. Observe log for write frame; observe `EVSE_STATE` channel.
+
+*Expected:*
+
+* Log: `DEBUG WRITE: :011000050001...E0E0[LRC]` (value `0xE0E0`).
+* `EVSE_STATE = E0` within one cycle.
+
+*Record:* [ ] PASS / [ ] FAIL / [ ] OPEN +
+Notes: ______________
+
+---
+
+=== H02b — Re-enable outlet (E2 → A1)
+
+*Precondition:* Device in E0 (from H02a or H01a restart).
+
+*Steps:*
+
+. Write `OUTLET_ENABLED = true`.
+. Observe log and `EVSE_STATE`.
+
+*Expected:*
+
+* Log: `DEBUG WRITE: :011000050001...E2E2[LRC]`.
+* `EVSE_STATE = E2`, then `A1` within two cycles.
+* No hardware reset required.
+
+*Record:* [ ] PASS / [ ] FAIL / [ ] OPEN +
+Notes: ______________
+
+---
+
+=== H02c — Disable during active charging session (session end)
+
+*Precondition:* EV charging, `EVSE_STATE = C2`, `SESSION_ENERGY` > 0.
+
+*Steps:*
+
+. Write `OUTLET_ENABLED = false`.
+. Observe `EVSE_STATE` and `SESSION_ENERGY`.
+. Check that EV stops drawing current.
+
+*Expected:*
+
+* `EVSE_STATE` transitions to E0.
+* `ACTIVE_POWER = 0` within one cycle.
+* `SESSION_ENERGY` retains final value (does not reset yet; resets only when next EV session starts).
+* EV reports charge stopped.
+
+*Record:* [ ] PASS / [ ] FAIL / [ ] OPEN +
+Notes: ______________
+
+---
+
+== H03  SOFT PAUSE — 100 % DUTY CYCLE SENTINEL  (behaviour goal G6 — HYPOTHESIS)
+
+_Validates: writing setpoint = 0 A sends `0x03E8` to reg `0x0014` and the device suspends current without disconnecting the EV._
+
+=== H03a — Soft pause with EV connected
+
+*Precondition:* EV connected and charging (state C2 or B2); known current draw > 0.
+
+*Steps:*
+
+. Apply setpoint 0 A via the EVSE scheduler or direct channel write.
+. Observe log for write frame to reg `0x0014`.
+. Wait two cycles; observe `CURRENT_L1/L2/L3`, `ACTIVE_POWER`, `EVSE_STATE`.
+
+*Expected:*
+
+* Log: `DEBUG WRITE: :01100014000103E8[LRC]` (value `0x03E8` = 1000).
+* `CURRENT_L1/L2/L3 → 0` within one cycle (EV stops drawing current).
+* `EVSE_STATE` remains B2 or C2 (EV stays connected; cable does not unlock).
+* EV dashboard shows "paused" or similar, not "disconnected".
+
+*Record:* [ ] PASS / [ ] FAIL / [ ] OPEN +
+Notes: ______________
+
+---
+
+=== H03b — Resume from soft pause
+
+*Precondition:* Device in soft pause state from H03a.
+
+*Steps:*
+
+. Apply setpoint 16 A (or whatever the scheduler recommends).
+. Observe `CURRENT_L1` and `EVSE_STATE`.
+
+*Expected:*
+
+* Log: `DEBUG WRITE: :011000140001010B[LRC]` (value `0x010B` = 267 for 16 A).
+* `CURRENT_L1` returns to ≈ 16 A within a few seconds (EV ramp-up time may vary).
+* `EVSE_STATE` moves to C2.
+
+*Record:* [ ] PASS / [ ] FAIL / [ ] OPEN +
+Notes: ______________
+
+---
+
+=== H03c — Soft pause vs hard disable distinction
+
+*Precondition:* EV connected and charging.
+
+*Steps:*
+
+. Soft pause: apply 0 A. Confirm EV stays connected (H03a).
+. Then hard disable: write `OUTLET_ENABLED = false`. Confirm EV disconnects / session ends.
+
+*Expected:* The two mechanisms produce clearly different EV behaviour. The soft pause keeps the session alive; the hard disable terminates it.
+
+*Record:* [ ] PASS / [ ] FAIL / [ ] OPEN +
+Notes: ______________
+
+---
+
+== H04  UPSTREAM TIMEOUT CONFIGURATION  (behaviour goal G9 — HYPOTHESIS)
+
+_Validates: reg `0x002C` write arms the hardware watchdog; when OpenEMS goes silent the device raises F4._
+
+=== H04a — Startup writes 0x9001 to reg 0x002C
+
+*Precondition:* `enableUpstreamTimeout = true` (default); `readOnly = false`; device in A1.
+
+*Steps:*
+
+. Restart OpenEMS component.
+. Observe log.
+
+*Expected sequence in log (order matters):*
+
+. `DEBUG WRITE: :011000050001...E2E2[LRC]` (reg `0x0005`, outlet enable).
+. `DEBUG WRITE: :01100002C00019001[LRC]` (reg `0x002C`, value `0x9001`, after device reaches E2).
+
+*Verify:* The `0x002C` write fires only when device is in state E2 (precondition per spec). If device starts in B2/C2, no `0x002C` write should appear — test H04b covers that edge case.
+
+*Record:* [ ] PASS / [ ] FAIL / [ ] OPEN +
+Notes: ______________
+
+---
+
+=== H04b — No 0x002C write when EV already connected at startup
+
+*Precondition:* EV connected (B2 or C2) when OpenEMS restarts.
+
+*Steps:* Restart component; observe log.
+
+*Expected:* No `DEBUG WRITE` for reg `0x002C` (precondition E2 not met).
+
+*Record:* [ ] PASS / [ ] FAIL / [ ] OPEN +
+Notes: ______________
+
+---
+
+=== H04c — Hardware raises F4 when OpenEMS goes silent
+
+*Precondition:* Upstream timeout enabled (reg `0x002C` = `0x9001` confirmed from H04a). EV connected and charging.
+
+*Steps:*
+
+. Note the upstream timeout interval from the spec (typically 60 s).
+. Kill or suspend the OpenEMS process (stop all Modbus communication).
+. Wait for the timeout interval + 5 s.
+. Observe device LED / display and EV charging status.
+. Resume OpenEMS; read `EVSE_STATE` and `FAULT_STATE`.
+
+*Expected:*
+
+* Device raises F4 after the timeout.
+* EV stops charging (safety net confirmed).
+* After OpenEMS resumes: `EVSE_STATE = F4`; `FAULT_STATE = F4`.
+* Device must be reset (write `0xE0E0` → `0xE2E2`) to recover.
+
+*Record:* [ ] PASS / [ ] FAIL / [ ] OPEN +
+Notes: ______________
+
+---
+
+=== H04d — Upstream timeout counter reset mechanism (open question U4)
+
+_Determines whether FC3 reads alone reset the timeout counter, or only writes to reg `0x0005`._
+
+*Precondition:* Upstream timeout enabled. Device in A1 (no EV, for safety). Timeout interval known.
+
+*Steps (reads-only scenario):*
+
+. Confirm OpenEMS is polling normally (FC3 reads every 1 s, no writes — e.g. setpoint unchanged).
+. Wait 1.5× the timeout interval without any write operation.
+. Observe: does the device raise F4?
+
+*Expected A (reads reset counter — spec assumption):* No F4; device stays in A1. +
+*Expected B (only writes reset counter):* F4 is raised after timeout.
+
+*If Expected B:* A periodic keepalive write to reg `0x0005` (`0xE2E2`, roughly every 30 s) must be added to the driver.
+
+*Resolves open question U4.*
+
+*Record:* [ ] PASS (reads reset) / [ ] FAIL (writes needed) / [ ] OPEN +
+Notes: ______________
+
+---
+
+=== H04e — enableUpstreamTimeout = false: no 0x002C write
+
+*Steps:* Reconfigure with `enableUpstreamTimeout = false`; restart; observe log.
+
+*Expected:* No write to reg `0x002C` in startup log.
+
+*Record:* [ ] PASS / [ ] FAIL / [ ] OPEN +
+Notes: ______________
+
+---
+
+== H05  PHASE CURRENT METERING  (behaviour goal G1)
+
+_Validates: current readings from registers 0x0030–0x0032 map correctly to CURRENT_L1/L2/L3 channels._
+
+=== H05a — Three-phase charging at known setpoint
+
+*Precondition:* Three-phase eMH1 (e.g. `EMH1_3P_22KW_CABLE`); EV charging at 16 A setpoint.
+
+*Steps:*
+
+. Apply setpoint 16 A.
+. Wait for EV to ramp up (≈ 10 s).
+. Read `CURRENT_L1`, `CURRENT_L2`, `CURRENT_L3` channels.
+. Measure actual current with a clamp meter on each phase.
+
+*Expected:*
+
+* `CURRENT_L1`, `CURRENT_L2`, `CURRENT_L3` each ≈ 16,000 mA (± 1,000 mA, resolution is 100 mA / 0.1 A).
+* Clamp meter readings agree with channel values.
+* `ACTIVE_POWER` ≈ 3 × 16 × 230 = 11,040 W.
+
+*Record:* [ ] PASS / [ ] FAIL / [ ] OPEN +
+Notes: ______________ (actual L1: __, L2: __, L3: __ mA; clamp: __, __, __ A)
+
+---
+
+=== H05b — Single-phase model: L2/L3 = 0
+
+*Precondition:* Single-phase eMH1 (e.g. `EMH1_1P_72KW_CABLE`); EV charging.
+
+*Steps:* Read `CURRENT_L1`, `CURRENT_L2`, `CURRENT_L3`.
+
+*Expected:*
+
+* `CURRENT_L1` ≈ actual current × 1000 mA.
+* `CURRENT_L2 = 0`; `CURRENT_L3 = 0`.
+* `ACTIVE_POWER` = `CURRENT_L1` × `VOLTAGE_L1` (1-phase only).
+
+*Record:* [ ] PASS / [ ] FAIL / [ ] OPEN +
+Notes: ______________
+
+---
+
+=== H05c — No-EV sentinel: unavailable → 0
+
+*Precondition:* No EV connected (state A1).
+
+*Steps:* Read `CURRENT_L1`, `CURRENT_L2`, `CURRENT_L3`.
+
+*Expected:*
+
+* Raw register value `0x03E8` (1000) → driver maps to 0 mA.
+* All three channels = 0 mA (not null; not 100,000 mA).
+
+*Record:* [ ] PASS / [ ] FAIL / [ ] OPEN +
+Notes: ______________
+
+---
+
+=== H05d — Phase rotation configuration
+
+*Precondition:* Installation wired with non-standard phase rotation (e.g. L3 on physical L1 terminal).
+
+*Steps:*
+
+. Configure `phaseRotation` to match the wiring.
+. Apply setpoint; measure physical current on each phase with clamp meter.
+. Verify `CURRENT_L1/L2/L3` channels map to the correct physical phases.
+
+*Expected:* Channel values agree with clamp meter per configured rotation.
+
+*Record:* [ ] PASS / [ ] FAIL / [ ] OPEN +
+Notes: ______________
+
+---
+
+=== H05e — PHASE_METERING_FAILED flag (BC4 condition)
+
+_System flags reg `0x0007` bit 6 = 1 signals unreliable current readings._
+
+*Precondition:* Trigger BC4 condition per ABL service manual (internal CT fault, typically requires deliberate hardware fault injection — skip if not possible in field).
+
+*Expected:*
+
+* `PHASE_METERING_FAILED` channel = true.
+* Warning logged: `"ABL eMH1 phase current metering failed"`.
+* Current channel values should be treated as unreliable (no further assertion).
+
+*Record:* [ ] PASS / [ ] FAIL / [ ] SKIP +
+Notes: ______________
+
+---
+
+== H06  DEVICE STATE MACHINE TRANSITIONS  (behaviour goal G2)
+
+_Validates: all reachable state transitions observable from OpenEMS reflect the real device state._
+
+=== H06a — A1: no EV
+
+*Steps:* Remove EV cable. Read `EVSE_STATE`, `IS_READY_FOR_CHARGING`.
+
+*Expected:* `EVSE_STATE = A1`; `IS_READY_FOR_CHARGING = false`; `isEvConnected = false`.
+
+*Record:* [ ] PASS / [ ] FAIL / [ ] OPEN +
+Notes: ______________
+
+---
+
+=== H06b — B1 → B2: EV connects, auto B1→B2 enabled
+
+*Steps:* Connect EV. Observe `EVSE_STATE` transitions.
+
+*Expected:*
+
+* `EVSE_STATE = B1` briefly (if observable at polling interval).
+* Auto B1→B2 transition fires (configured via reg `0x002C`): `EVSE_STATE = B2` within a few seconds.
+* `IS_READY_FOR_CHARGING = true` when in B2.
+
+*Record:* [ ] PASS / [ ] FAIL / [ ] OPEN +
+Notes: ______________ (B1 observed: Y/N; B2 reached in __ s)
+
+---
+
+=== H06c — B2 → C2: EV draws current
+
+*Steps:* With EV in B2, allow EV to start drawing current (EV-side action or close CP resistor).
+
+*Expected:*
+
+* `EVSE_STATE = C2`.
+* `CURRENT_L1` > 0.
+
+*Record:* [ ] PASS / [ ] FAIL / [ ] OPEN +
+Notes: ______________
+
+---
+
+=== H06d — C2 → B2: EV pauses
+
+*Steps:* While in C2, apply setpoint 0 A (soft pause, H03a) or observe natural EV pause.
+
+*Expected:* `EVSE_STATE = B2` or remains C2 with `CURRENT = 0` (device-specific behaviour — note which is observed).
+
+*Record:* [ ] PASS / [ ] FAIL / [ ] OPEN +
+Notes: ______________
+
+---
+
+=== H06e — EV disconnect → A1
+
+*Steps:* Remove EV cable while in C2 or B2.
+
+*Expected:*
+
+* `EVSE_STATE = A1`.
+* `IS_READY_FOR_CHARGING = false`; `isEvConnected = false`.
+* `SESSION_ENERGY` retains final value.
+
+*Record:* [ ] PASS / [ ] FAIL / [ ] OPEN +
+Notes: ______________
+
+---
+
+=== H06f — E0 → E2 without hardware reset
+
+*Precondition:* Write `0xE0E0` → device in E0. Then write `0xE2E2`.
+
+*Expected:* Device returns to E2 / A1 without requiring a power-cycle.
+
+*This is the core assumption of G4b hypothesis.* See H02b.
+
+*Record:* [ ] PASS / [ ] FAIL / [ ] OPEN +
+Notes: ______________
+
+---
+
+== H07  FAULT STATE REPORTING  (behaviour goal G7)
+
+_Validates: each F-state maps to the correct `AblEMh1FaultState` enum value and sets `isEvConnected = false`._
+
+[cols="1,2,2,2"]
+|===
+| State | How to trigger | Expected FAULT_STATE | Record
+
+| F4  | Stop OpenEMS for > timeout (H04c) | `F4` | [ ] P / [ ] F / [ ] OPEN
+| F7  | Connect IEC 61851 State D EV (4-diode circuit, PP/CP for ventilation request) | `F7` | [ ] SKIP (no test EV)
+| F9  | EV draws > I_cmax for sustained period (deliberately set low setpoint, EV ignores it) | `F9` | [ ] P / [ ] F / [ ] OPEN
+| F10 | External heating or cooling fault (requires temp sensor manipulation — field: wait for hot weather) | `F10` | [ ] SKIP
+| F1  | Welding detection: requires relay welding simulation | `F1` | [ ] SKIP
+| F3  | RDC-MD: requires DC injection test equipment | `F3` | [ ] SKIP
+|===
+
+For each triggered fault:
+
+* `EVSE_STATE = F<n>` channel.
+* `FAULT_STATE = F<n>` channel (matching `AblEMh1FaultState` enum).
+* Warning logged: `"ABL eMH1 FAULT: F<n>"`.
+* `IS_READY_FOR_CHARGING = false`; `isEvConnected = false`.
+
+*Recovery procedure for F4:*
+
+. Write `OUTLET_ENABLED = false` (`0xE0E0` → E0).
+. Write `OUTLET_ENABLED = true` (`0xE2E2` → E2).
+. Confirm `EVSE_STATE = A1`.
+
+*Record (general fault recovery):* [ ] PASS / [ ] FAIL / [ ] OPEN +
+Notes: ______________
+
+---
+
+== H08  SYSTEM FLAGS  (behaviour goal G13)
+
+_Validates: warning channels map correctly to reg `0x0007` flag bits._
+
+=== H08a — UPSTREAM_COMM_LOST (bit 9)
+
+*Trigger:* Stop the Modbus serial adapter (unplug USB) briefly while OpenEMS continues running.
+
+*Expected:*
+
+* `UPSTREAM_COMM_LOST = true` when device registers loss of upstream communication.
+* Warning logged.
+* Reconnect USB → `UPSTREAM_COMM_LOST = false` after one cycle.
+
+*Record:* [ ] PASS / [ ] FAIL / [ ] OPEN / [ ] SKIP +
+Notes: ______________
+
+---
+
+=== H08b — LOAD_IMBALANCE (bit 8) — BC3 condition
+
+*Trigger:* Device internally detects phase imbalance. In field: one phase significantly overloaded vs others during C2.
+
+*Expected:*
+
+* `LOAD_IMBALANCE = true`.
+* Device may transition C2 → C4 (reduced current due to imbalance).
+* Warning logged.
+
+*Record:* [ ] PASS / [ ] FAIL / [ ] OPEN / [ ] SKIP +
+Notes: ______________
+
+---
+
+=== H08c — TEMPERATURE_WARNING (bit 7) — BC5 condition
+
+*Trigger:* Internal temperature between 60 °C and 80 °C. Difficult to force — monitor during sustained high-current charging in hot ambient conditions.
+
+*Expected:* `TEMPERATURE_WARNING = true`; warning logged; charging continues (not a fault).
+
+*Record:* [ ] PASS / [ ] FAIL / [ ] OPEN / [ ] SKIP +
+Notes: ______________
+
+---
+
+=== H08d — SYS_FLAGS_RAW channel
+
+*Steps:* Read `SYS_FLAGS_RAW` channel during normal operation.
+
+*Expected:* Raw integer value of reg `0x0007` visible; can be cross-checked against individual flag channels.
+
+*Record:* [ ] PASS / [ ] FAIL / [ ] OPEN +
+Notes: ______________ (sample value: `0x____`)
+
+---
+
+== H09  COMMUNICATION FAILURE DETECTION  (behaviour goal G8)
+
+=== H09a — MODBUS_COMMUNICATION_FAILED triggered after 5 failed cycles
+
+*Steps:*
+
+. Unplug RS-485 cable from eMH1 (or disable serial adapter).
+. Wait for 5+ polling cycles (≈ 5 s at 1 Hz).
+. Read `MODBUS_COMMUNICATION_FAILED` channel.
+
+*Expected:*
+
+* `MODBUS_COMMUNICATION_FAILED = WARNING` after 5 consecutive failed reads.
+* `EVSE_STATE = UNDEFINED`.
+* Log shows repeated communication errors.
+
+*Record:* [ ] PASS / [ ] FAIL / [ ] OPEN +
+Notes: ______________ (failed after __ cycles)
+
+---
+
+=== H09b — Recovery clears flag
+
+*Steps:* Reconnect RS-485 cable after H09a.
+
+*Expected:*
+
+* `MODBUS_COMMUNICATION_FAILED = OK` (cleared) after one successful read.
+* `EVSE_STATE` returns to the actual device state.
+
+*Record:* [ ] PASS / [ ] FAIL / [ ] OPEN +
+Notes: ______________
+
+---
+
+=== H09c — ABL non-standard frame-start character
+
+_Validates the `AblCompatibleSerialConnection` bridge: that `>` (0x3E) responses from the device are accepted transparently._
+
+*Steps:*
+
+. Connect a serial sniffer (e.g. `picocom` or Wireshark on the tty) in parallel.
+. Issue any read request; observe raw response.
+
+*Expected:*
+
+* Raw response from device starts with `>` (0x3E), not `:` (0x3A).
+* OpenEMS receives the data correctly (channels are populated, no framing errors).
+* Without the bridge using `AblCompatibleSerialConnection`, the j2mod parser would reject these responses.
+
+*Verification note:* If you swap to a standard `BridgeModbusSerialAscii` without `ablCompatible = true`, all reads must fail with `CRC / LRC error`. This confirms the workaround is necessary.
+
+*Record:* [ ] PASS / [ ] FAIL / [ ] OPEN +
+Notes: ______________ (sniffed first response byte: `0x__`)
+
+---
+
+== H10  B1→B2 AUTO-TRANSITION PERSISTENCE  (behaviour goal G12)
+
+_Validates: the auto B1→B2 setting written to reg `0x002C` persists across an eMH1 power cycle._
+
+=== H10a — Auto B1→B2 confirmed after eMH1 power cycle
+
+*Precondition:* Driver has previously written `0x9001` to reg `0x002C` (confirmed from H04a).
+
+*Steps:*
+
+. Power-cycle the ABL eMH1 (switch off at breaker, wait 5 s, switch back on).
+. OpenEMS continues running; it will reconnect automatically.
+. Connect EV cable.
+. Observe `EVSE_STATE` transitions.
+
+*Expected:*
+
+* After power-on: `EVSE_STATE = A1`.
+* EV connects: `EVSE_STATE = B1` (briefly, or possibly directly B2).
+* Auto B1→B2 setting persisted across power cycle: `EVSE_STATE = B2` without any OpenEMS write command.
+
+*Check via system flags:* `SYS_FLAGS_RAW` bit 14 = 0 (B1→B2 enabled after power-cycle).
+
+*Record:* [ ] PASS / [ ] FAIL / [ ] OPEN +
+Notes: ______________
+
+---
+
+=== H10b — B1→B2 behaviour when reg 0x002C never written (factory default)
+
+*Precondition:* Fresh factory device, or device where `0x002C` was never written.
+
+*Steps:* Connect EV; observe whether auto B1→B2 occurs.
+
+*Expected:* Behaviour depends on factory default — document what is observed; this determines whether the `0x002C` write is critical for charging to start.
+
+*Record:* [ ] PASS / [ ] FAIL / [ ] OPEN / [ ] SKIP +
+Notes: ______________
+
+---
+
+== H11  CHARGE CURRENT SETPOINT ACCURACY  (behaviour goal G5)
+
+_Validates: the duty-cycle formula `round(X / 0.6 × 10)` produces the correct device response._
+
+[cols="1,1,1,2"]
+|===
+| Setpoint | Expected raw value | Expected actual current | Record
+
+| 6 A  | `0x0064` (100) | 6 A  | [ ] P / [ ] F / [ ] OPEN
+| 10 A | `0x00A9` (169) | 10 A | [ ] P / [ ] F / [ ] OPEN
+| 16 A | `0x010B` (267) | 16 A | [ ] P / [ ] F / [ ] OPEN
+| 20 A | `0x014D` (333) | 20 A | [ ] P / [ ] F / [ ] OPEN
+| 32 A | `0x0215` (533) | 32 A (22 kW model only) | [ ] P / [ ] F / [ ] SKIP
+|===
+
+For each row:
+
+. Apply setpoint via scheduler or direct write.
+. Observe `DEBUG WRITE` log frame for reg `0x0014`.
+. Wait 10 s; read `CURRENT_L1` (or average L1/L2/L3 for 3-phase).
+
+*Record (general notes):* ______________
+
+---
+
+== H12  ENERGY METERING  (behaviour goals G3a, G3b)
+
+=== H12a — SESSION_ENERGY accumulates and resets
+
+*Steps:*
+
+. Start with no EV (A1); confirm `SESSION_ENERGY = 0` or last session value.
+. Connect EV; confirm `SESSION_ENERGY` resets to 0 when state enters B1/B2.
+. Charge at 16 A for 5 minutes; read `SESSION_ENERGY`.
+. Disconnect EV.
+. Read `SESSION_ENERGY` — retains final value.
+. Reconnect EV — `SESSION_ENERGY` resets to 0 again.
+
+*Expected (5 min × 11,040 W ≈ 920 Wh):*
+
+* `SESSION_ENERGY` ≈ 920 Wh after 5 min (accuracy depends on polling frequency and actual current).
+* Resets precisely at EV (re)connection; retains value between connection and disconnection.
+
+*Record:* [ ] PASS / [ ] FAIL / [ ] OPEN +
+Notes: ______________ (measured: __ Wh after 5 min)
+
+---
+
+=== H12b — ACTIVE_CONSUMPTION_ENERGY persists across restart
+
+*Steps:*
+
+. Note current `ACTIVE_CONSUMPTION_ENERGY` value.
+. Charge for 2 minutes.
+. Restart OpenEMS (bundle restart only — not hardware reset).
+. Read `ACTIVE_CONSUMPTION_ENERGY` immediately after restart.
+
+*Expected:*
+
+* Value after restart ≥ value before restart (Timedata seed from persistence).
+* Value does not reset to 0.
+
+*Note:* Requires Timedata service to be configured and running.
+
+*Record:* [ ] PASS / [ ] FAIL / [ ] OPEN / [ ] SKIP (no Timedata) +
+Notes: ______________ (before: __ Wh; after restart: __ Wh)
+
+---
+
+== H13  VOLTAGE FALLBACK AND EXTERNAL METER  (behaviour goal G0b)
+
+=== H13a — Fallback voltages used when no external channel
+
+*Steps:* Configure `voltageL1/L2/L3ChannelAddress = ""` (empty). Read `VOLTAGE_L1`, `VOLTAGE_L2`, `VOLTAGE_L3`.
+
+*Expected:*
+
+* `VOLTAGE_L1 = fallbackVoltageL1 × 1000` mV (e.g. 230 V → 230,000 mV).
+* Same for L2 and L3.
+
+*Record:* [ ] PASS / [ ] FAIL / [ ] OPEN +
+Notes: ______________
+
+---
+
+=== H13b — External meter channel overrides fallback
+
+*Precondition:* External meter (e.g. `meter0`) with `VoltageL1` channel available. Configure `voltageL1ChannelAddress = "meter0/VoltageL1"`.
+
+*Steps:* Read `VOLTAGE_L1`.
+
+*Expected:* `VOLTAGE_L1` matches the meter channel value, not the fallback.
+
+*Record:* [ ] PASS / [ ] FAIL / [ ] OPEN / [ ] SKIP (no external meter) +
+Notes: ______________
+
+---
+
+== H14  READ-ONLY MODE COMPLETENESS  (behaviour goal G10)
+
+=== H14a — All writes blocked in readOnly mode
+
+*Precondition:* `readOnly = true`; `logVerbosity = READS_AND_WRITES_VERBOSE`.
+
+*Steps:*
+
+. Attempt setpoint write (any ampere value).
+. Attempt `OUTLET_ENABLED = false`.
+. Restart component (would normally trigger startup write).
+. Observe log.
+
+*Expected:*
+
+* Every blocked write logs: `BLOCKED BY READ-ONLY: DEBUG WRITE: <frame>`.
+* No actual FC16 write reaches the device (confirm via serial sniffer — reg `0x0005`, `0x0014`, `0x002C` must show no write activity).
+* `EVSE_STATE` does not change.
+
+*Record:* [ ] PASS / [ ] FAIL / [ ] OPEN +
+Notes: ______________
+
+---
+
+== Hardware Variant Matrix
+
+Record which hardware variants have been validated:
+
+[cols="2,1,1,1,1,2"]
+|===
+| Hardware Type | H01-H02 | H03-H04 | H05 | H06-H07 | Notes
+
+| `EMH1_1P_36KW_CABLE`     | | | | |
+| `EMH1_1P_72KW_SOCKET`    | | | | |
+| `EMH1_1P_72KW_CABLE`     | | | | |
+| `EMH1_1P_72KW_CABLE_T1`  | | | | |
+| `EMH1_3P_11KW_SOCKET`    | | | | |
+| `EMH1_3P_11KW_CABLE`     | | | | |
+| `EMH1_3P_22KW_SOCKET`    | | | | |
+| `EMH1_3P_22KW_CABLE`     | | | | |
+|===
+
+---
+
+== Open Questions Resolution Tracker
+
+[cols="1,2,1,2"]
+|===
+| ID | Question | Test | Status / Answer
+
+| U4 | Does any Modbus read (FC3) reset the upstream timeout counter, or only writes to reg `0x0005`? | H04d | [ ] Open / Answer: __
+| U6 | If OpenEMS restarts while EV is charging (C2/B2), is it safe to skip the `0xE2E2` write and continue from the current state? | H01c | [ ] Open / Answer: __
+|===
+
+---
+
+== Test Run Log
+
+[cols="1,1,1,1,3"]
+|===
+| Date | Tester | Hardware variant / firmware | Tests run | Outcome summary
+
+| | | | |
+| | | | |
+|===
